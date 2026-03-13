@@ -83,7 +83,7 @@ export interface RepoBookmark {
 export interface Project {
   id: string;
   name: string;
-  color: string; // hex color for the project badge
+  avatar?: string; // base64 data URL for project image
   repoIds: string[];
   createdAt: string;
 }

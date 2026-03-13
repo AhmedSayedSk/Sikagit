@@ -29,7 +29,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    color TEXT NOT NULL DEFAULT '#7ba4f7',
+    avatar TEXT,
     created_at TEXT NOT NULL
   );
 
@@ -39,6 +39,19 @@ db.exec(`
     PRIMARY KEY (project_id, repo_id)
   );
 `);
+
+// Migrate existing databases: add avatar column, drop color/icon if present
+const columns = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+const colNames = columns.map(c => c.name);
+if (!colNames.includes('avatar')) {
+  db.exec(`ALTER TABLE projects ADD COLUMN avatar TEXT`);
+}
+if (colNames.includes('color')) {
+  db.exec(`ALTER TABLE projects DROP COLUMN color`);
+}
+if (colNames.includes('icon')) {
+  db.exec(`ALTER TABLE projects DROP COLUMN icon`);
+}
 
 // One-time migration from JSON files
 const reposJsonPath = path.join(DATA_DIR, 'repos.json');
@@ -70,13 +83,13 @@ if (fs.existsSync(reposJsonPath) || fs.existsSync(projectsJsonPath)) {
     if (fs.existsSync(projectsJsonPath)) {
       const projects: Project[] = JSON.parse(fs.readFileSync(projectsJsonPath, 'utf-8'));
       const insertProject = db.prepare(
-        `INSERT OR IGNORE INTO projects (id, name, color, created_at) VALUES (@id, @name, @color, @createdAt)`
+        `INSERT OR IGNORE INTO projects (id, name, avatar, created_at) VALUES (@id, @name, @avatar, @createdAt)`
       );
       const insertProjectRepo = db.prepare(
         `INSERT OR IGNORE INTO project_repos (project_id, repo_id) VALUES (@projectId, @repoId)`
       );
       for (const p of projects) {
-        insertProject.run({ id: p.id, name: p.name, color: p.color, createdAt: p.createdAt });
+        insertProject.run({ id: p.id, name: p.name, avatar: (p as any).avatar ?? null, createdAt: p.createdAt });
         for (const repoId of p.repoIds) {
           insertProjectRepo.run({ projectId: p.id, repoId });
         }
@@ -99,7 +112,7 @@ function rowToRepo(row: any): RepoBookmark {
     isWSL: !!row.is_wsl,
     lastOpened: row.last_opened ?? undefined,
     group: row.group ?? undefined,
-    avatar: row.avatar ?? undefined,
+    avatar: row.avatar || undefined,
   };
 }
 
@@ -164,7 +177,7 @@ export function repoExistsByPath(repoPath: string): boolean {
 const stmtAllProjects = db.prepare('SELECT * FROM projects');
 const stmtProjectById = db.prepare('SELECT * FROM projects WHERE id = ?');
 const stmtInsertProject = db.prepare(
-  `INSERT INTO projects (id, name, color, created_at) VALUES (@id, @name, @color, @createdAt)`
+  `INSERT INTO projects (id, name, avatar, created_at) VALUES (@id, @name, @avatar, @createdAt)`
 );
 const stmtDeleteProject = db.prepare('DELETE FROM projects WHERE id = ?');
 const stmtProjectRepos = db.prepare('SELECT repo_id FROM project_repos WHERE project_id = ?');
@@ -177,7 +190,7 @@ function rowToProject(row: any, repoIds: string[]): Project {
   return {
     id: row.id,
     name: row.name,
-    color: row.color,
+    avatar: row.avatar || undefined,
     repoIds,
     createdAt: row.created_at,
   };
@@ -204,7 +217,7 @@ export function insertProject(project: Project): void {
     stmtInsertProject.run({
       id: project.id,
       name: project.name,
-      color: project.color,
+      avatar: project.avatar ?? null,
       createdAt: project.createdAt,
     });
     for (const repoId of project.repoIds) {
@@ -216,7 +229,7 @@ export function insertProject(project: Project): void {
 
 export function updateProject(
   id: string,
-  data: { name?: string; color?: string; repoIds?: string[] }
+  data: { name?: string; avatar?: string; repoIds?: string[] }
 ): Project | undefined {
   const existing = stmtProjectById.get(id) as any;
   if (!existing) return undefined;
@@ -226,7 +239,7 @@ export function updateProject(
     const params: any = { id };
 
     if (data.name !== undefined) { sets.push('name = @name'); params.name = data.name; }
-    if (data.color !== undefined) { sets.push('color = @color'); params.color = data.color; }
+    if (data.avatar !== undefined) { sets.push('avatar = @avatar'); params.avatar = data.avatar || null; }
 
     if (sets.length > 0) {
       db.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = @id`).run(params);

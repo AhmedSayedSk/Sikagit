@@ -12,7 +12,7 @@ router.get('/', (_req: Request, res: Response) => {
 
 // Create project
 router.post('/', (req: Request, res: Response) => {
-  const { name, color, repoIds } = req.body;
+  const { name, avatar, repoIds } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Missing required field: name' });
@@ -22,7 +22,7 @@ router.post('/', (req: Request, res: Response) => {
   const project: Project = {
     id: uuid(),
     name,
-    color: color || '#7ba4f7',
+    avatar: avatar || undefined,
     repoIds: repoIds || [],
     createdAt: new Date().toISOString(),
   };
@@ -34,9 +34,9 @@ router.post('/', (req: Request, res: Response) => {
 // Update project
 router.patch('/:id', (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { name, color, repoIds } = req.body;
+  const { name, avatar, repoIds } = req.body;
 
-  const updated = db.updateProject(id, { name, color, repoIds });
+  const updated = db.updateProject(id, { name, avatar, repoIds });
   if (!updated) {
     res.status(404).json({ success: false, error: 'Project not found' });
     return;

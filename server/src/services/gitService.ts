@@ -1,9 +1,33 @@
 import simpleGit, { SimpleGit } from 'simple-git';
 import { execSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import type { GitCommit, GitBranch, GitTag, GitFileStatus, GitStatus } from '@sikagit/shared';
 import { normalizePath } from './pathService';
+
+/**
+ * Read a value from the host's global gitconfig.
+ * Inside Docker the host home dirs are mounted at /host/home/<user>/.gitconfig
+ */
+function readHostGitConfig(key: string): string {
+  try {
+    // Try /host/home/*/.gitconfig
+    const hostHome = '/host/home';
+    if (existsSync(hostHome)) {
+      for (const user of readdirSync(hostHome)) {
+        const cfgPath = join(hostHome, user, '.gitconfig');
+        if (existsSync(cfgPath)) {
+          const result = execSync(
+            `git config --file '${cfgPath}' '${key}'`,
+            { encoding: 'utf-8' }
+          ).trim();
+          if (result) return result;
+        }
+      }
+    }
+  } catch { /* not found */ }
+  return '';
+}
 
 function getGit(repoPath: string): SimpleGit {
   const normalized = normalizePath(repoPath);
@@ -31,7 +55,7 @@ export async function getStatus(repoPath: string): Promise<GitStatus> {
     behind: status.behind,
     files,
     staged: files.filter(f => f.isStaged),
-    unstaged: files.filter(f => !f.isStaged && f.workingDir !== '?' && f.workingDir !== ' '),
+    unstaged: files.filter(f => f.workingDir !== ' ' && f.workingDir !== '?' && f.workingDir !== '!'),
     untracked: status.not_added,
     conflicted: status.conflicted,
   };
@@ -291,25 +315,35 @@ export async function unstageFiles(repoPath: string, files: string[]): Promise<v
 export async function commit(repoPath: string, message: string, amend = false): Promise<string> {
   const git = getGit(repoPath);
 
-  // Ensure author identity is available before committing
-  const hasLocal = async (key: string) => {
-    try { return !!(await git.raw(['config', '--local', key])).trim(); }
-    catch { return false; }
-  };
-  const hasGlobal = async (key: string) => {
-    try { return !!(await git.raw(['config', '--global', key])).trim(); }
-    catch { return false; }
+  // Read author identity: local repo config → container global → host global gitconfig
+  const getVal = async (key: string): Promise<string> => {
+    try {
+      const local = (await git.raw(['config', '--local', key])).trim();
+      if (local) return local;
+    } catch { /* not set locally */ }
+    try {
+      const global = (await git.raw(['config', '--global', key])).trim();
+      if (global) return global;
+    } catch { /* not set globally */ }
+    return readHostGitConfig(key);
   };
 
-  const hasName = await hasLocal('user.name') || await hasGlobal('user.name');
-  const hasEmail = await hasLocal('user.email') || await hasGlobal('user.email');
+  const authorName = await getVal('user.name');
+  const authorEmail = await getVal('user.email');
 
-  if (!hasName || !hasEmail) {
+  if (!authorName || !authorEmail) {
     throw new Error('Author identity not configured. Please set Author Name and Email in Repository Settings before committing.');
   }
 
-  const result = await git.commit(message, undefined, amend ? { '--amend': null } : {});
-  return result.commit;
+  // Use execSync with -c flags to pass author identity directly, bypassing container's missing global config
+  const normalized = normalizePath(repoPath);
+  const amendFlag = amend ? ' --amend' : '';
+  const escapedMessage = message.replace(/'/g, "'\\''");
+  const cmd = `git -c user.name='${authorName.replace(/'/g, "'\\''")}' -c user.email='${authorEmail.replace(/'/g, "'\\''")}' commit -m '${escapedMessage}'${amendFlag}`;
+  const result = execSync(cmd, { cwd: normalized, encoding: 'utf-8' });
+  // Extract commit hash from output like "[branch abc1234] message"
+  const match = result.match(/\[[\w/.-]+\s+([a-f0-9]+)\]/);
+  return match ? match[1] : '';
 }
 
 export async function discardChanges(repoPath: string, files: string[]): Promise<void> {
@@ -320,8 +354,15 @@ export async function discardChanges(repoPath: string, files: string[]): Promise
 export async function getConfig(repoPath: string): Promise<import('@sikagit/shared').RepoConfig> {
   const git = getGit(repoPath);
   const getVal = async (key: string) => {
-    try { return (await git.raw(['config', '--local', key])).trim(); }
-    catch { return undefined; }
+    try {
+      const local = (await git.raw(['config', '--local', key])).trim();
+      if (local) return local;
+    } catch { /* not set */ }
+    try {
+      const global = (await git.raw(['config', '--global', key])).trim();
+      if (global) return global;
+    } catch { /* not set */ }
+    return readHostGitConfig(key) || undefined;
   };
   const remoteUrl = await getVal('remote.origin.url');
   const userName = await getVal('user.name');

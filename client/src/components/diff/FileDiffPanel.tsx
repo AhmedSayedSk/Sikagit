@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { X, FileText } from 'lucide-react';
 import { useStatusStore } from '../../store/statusStore';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { api } from '../../lib/api';
 import { DiffView } from './DiffView';
 
@@ -53,6 +54,7 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
   const { selectedFile, selectedFileSource, selectFile, fetchStatus } = useStatusStore();
   const [diff, setDiff] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [confirmDiscardHunk, setConfirmDiscardHunk] = useState<number | null>(null);
 
   const loadDiff = useCallback(() => {
     if (!selectedFile || !selectedFileSource) return;
@@ -76,7 +78,7 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
     if (!patch) return;
     try {
       await api.stageHunk(repoPath, patch);
-      fetchStatus(repoPath);
+      await fetchStatus(repoPath);
       loadDiff();
     } catch (err) {
       console.error('Stage hunk failed:', err);
@@ -88,7 +90,7 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
     if (!patch) return;
     try {
       await api.discardHunk(repoPath, patch);
-      fetchStatus(repoPath);
+      await fetchStatus(repoPath);
       loadDiff();
     } catch (err) {
       console.error('Discard hunk failed:', err);
@@ -126,10 +128,19 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
           <DiffView
             diff={diff}
             onStageHunk={showHunkActions ? handleStageHunk : undefined}
-            onDiscardHunk={showHunkActions ? handleDiscardHunk : undefined}
+            onDiscardHunk={showHunkActions ? ((hunkIndex: number) => setConfirmDiscardHunk(hunkIndex)) : undefined}
           />
         )}
       </div>
+      {confirmDiscardHunk !== null && (
+        <ConfirmDialog
+          title="Discard Hunk"
+          message="Are you sure you want to discard this hunk? This action cannot be undone."
+          confirmLabel="Discard"
+          onConfirm={() => { handleDiscardHunk(confirmDiscardHunk); setConfirmDiscardHunk(null); }}
+          onCancel={() => setConfirmDiscardHunk(null)}
+        />
+      )}
     </div>
   );
 }
