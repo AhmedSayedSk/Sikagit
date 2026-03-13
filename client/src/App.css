@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  /* Base palette — built around #282A42 */
+  --color-bg-primary: #1e2036;
+  --color-bg-secondary: #282a42;
+  --color-bg-tertiary: #32345a;
+  --color-border: #3e4070;
+  --color-text-primary: #e2e4f0;
+  --color-text-secondary: #9a9dba;
+  --color-text-muted: #5c5f80;
+  --color-accent: #7ba4f7;
+  --color-accent-emphasis: #5b8def;
+  --color-success: #6bcf7f;
+  --color-warning: #e0b84a;
+  --color-danger: #ef6f6f;
+
+  /* Diff colors — tuned for blue-purple base */
+  --color-diff-add-bg: rgba(76, 175, 130, 0.44);
+  --color-diff-add-gutter: transparent;
+  --color-diff-add-marker: #e2e4f0;
+  --color-diff-remove-bg: rgba(200, 100, 120, 0.44);
+  --color-diff-remove-gutter: transparent;
+  --color-diff-remove-marker: #e2e4f0;
+
+  /* Status indicator colors */
+  --color-status-added: #6bcf7f;
+  --color-status-modified: #d4a84a;
+  --color-status-deleted: #ef6f6f;
+  --color-status-renamed: #7ba4f7;
+  --color-status-conflict: #ef6f6f;
+  --color-status-untracked: #7c7fa0;
+
+  /* Lane colors — harmonized with blue-purple theme */
+  --color-lane-0: #7ba4f7;
+  --color-lane-1: #6bcf7f;
+  --color-lane-2: #d4a84a;
+  --color-lane-3: #ef6f6f;
+  --color-lane-4: #b88cf5;
+  --color-lane-5: #e88ab8;
+  --color-lane-6: #5ccfd6;
+  --color-lane-7: #d4854a;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-tertiary) transparent;
+}
+
+body {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-tertiary);
+  border-radius: 4px;
+}

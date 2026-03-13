@@ -1,0 +1,7 @@
+{
+  "name": "@sikagit/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "types/git.ts",
+  "types": "types/git.ts"
+}

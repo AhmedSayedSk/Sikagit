@@ -1,0 +1,38 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-server
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./server/src:/app/server/src
+      - ./shared:/app/shared
+      - ./data:/app/server/data
+      # Mount host filesystem so git repos are accessible
+      - /home:/host/home
+      - /mnt:/host/mnt
+    environment:
+      - PORT=3001
+      - NODE_ENV=development
+      - CORS_ORIGINS=http://localhost:3200,http://127.0.0.1:3200
+      - DATA_DIR=/app/server/data
+    restart: unless-stopped
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-client
+    ports:
+      - "3200:5173"
+    volumes:
+      - ./client/src:/app/client/src
+      - ./client/index.html:/app/client/index.html
+      - ./shared:/app/shared
+    environment:
+      - VITE_API_URL=http://server:3001
+    depends_on:
+      - server
+    restart: unless-stopped
