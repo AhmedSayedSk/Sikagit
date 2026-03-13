@@ -22,7 +22,7 @@ function RepoItem({ repo, isActive, onSelect, onSettings, onRemove }: {
   return (
     <div
       className={cn(
-        'group flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors',
+        'group flex items-center gap-2 mx-2 px-3 py-1.5 cursor-pointer transition-colors rounded-md',
         isActive
           ? 'bg-accent-emphasis/20 text-accent'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
@@ -71,7 +71,7 @@ function ProjectSection({ project, repos, activeRepoId, onSelectRepo, onSettings
     <div className="mb-0.5">
       {/* Project header */}
       <div
-        className="group flex items-center gap-1.5 px-2 py-1 cursor-pointer hover:bg-bg-tertiary/30 transition-colors"
+        className="group flex items-center gap-1.5 px-2 py-2 cursor-pointer hover:bg-bg-tertiary/30 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? <ChevronDown size={11} className="text-text-muted" /> : <ChevronRight size={11} className="text-text-muted" />}
@@ -102,9 +102,9 @@ function ProjectSection({ project, repos, activeRepoId, onSelectRepo, onSettings
 
       {/* Project repos */}
       {expanded && (
-        <div className="pl-2">
+        <div className="ml-3 mt-1 mb-2">
           {projectRepos.length === 0 ? (
-            <p className="text-[0.75em] text-text-muted px-3 py-1">No repositories</p>
+            <p className="text-[0.75em] text-text-muted px-3 py-1 text-center">No repositories</p>
           ) : (
             projectRepos.map(repo => (
               <RepoItem

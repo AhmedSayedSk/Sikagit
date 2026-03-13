@@ -351,6 +351,16 @@ export async function discardChanges(repoPath: string, files: string[]): Promise
   await git.checkout(['--', ...files]);
 }
 
+export async function deleteUntrackedFiles(repoPath: string, files: string[]): Promise<void> {
+  const normalized = normalizePath(repoPath);
+  const { unlinkSync } = await import('fs');
+  for (const file of files) {
+    try {
+      unlinkSync(join(normalized, file));
+    } catch { /* file may already be gone */ }
+  }
+}
+
 export async function getConfig(repoPath: string): Promise<import('@sikagit/shared').RepoConfig> {
   const git = getGit(repoPath);
   const getVal = async (key: string) => {
