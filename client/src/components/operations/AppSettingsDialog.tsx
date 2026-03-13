@@ -67,6 +67,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     diffFontSize, setDiffFontSize,
     diffLineHeight, setDiffLineHeight,
     theme, setTheme,
+    groupFilesByFolder, setGroupFilesByFolder,
   } = useUIStore();
 
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -76,18 +77,21 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
   const [draftDiffFontSize, setDraftDiffFontSize] = useState(diffFontSize);
   const [draftDiffLineHeight, setDraftDiffLineHeight] = useState(diffLineHeight);
   const [draftTheme, setDraftTheme] = useState(theme);
+  const [draftGroupFiles, setDraftGroupFiles] = useState(groupFilesByFolder);
 
   const hasChanges =
     draftFontSize !== fontSize ||
     draftDiffFontSize !== diffFontSize ||
     draftDiffLineHeight !== diffLineHeight ||
-    draftTheme !== theme;
+    draftTheme !== theme ||
+    draftGroupFiles !== groupFilesByFolder;
 
   const handleSave = () => {
     setFontSize(draftFontSize);
     setDiffFontSize(draftDiffFontSize);
     setDiffLineHeight(draftDiffLineHeight);
     setTheme(draftTheme);
+    setGroupFilesByFolder(draftGroupFiles);
     onClose();
   };
 
@@ -96,6 +100,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDraftDiffFontSize(12);
     setDraftDiffLineHeight(3);
     setDraftTheme('dark');
+    setDraftGroupFiles(true);
   };
 
   return (
@@ -156,6 +161,44 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
                     min={10}
                     max={20}
                   />
+                </div>
+
+                {/* Group files by folder */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Group Files by Folder</h3>
+                      <p className="text-[0.6rem] text-text-muted">Group staged and unstaged files by their parent directory</p>
+                    </div>
+                    <div
+                      onClick={() => setDraftGroupFiles(!draftGroupFiles)}
+                      style={{
+                        width: 32,
+                        height: 18,
+                        borderRadius: 9,
+                        backgroundColor: draftGroupFiles ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                        border: `1px solid ${draftGroupFiles ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        position: 'relative',
+                        transition: 'background-color 0.2s, border-color 0.2s',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: '50%',
+                          backgroundColor: '#fff',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                          position: 'absolute',
+                          top: 2,
+                          left: draftGroupFiles ? 17 : 2,
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Preview */}

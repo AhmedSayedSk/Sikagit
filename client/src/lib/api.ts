@@ -95,6 +95,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo, files }),
   }),
+  deleteUntrackedFiles: (repo: string, files: string[]) => request<void>('/git/delete-untracked', {
+    method: 'POST',
+    body: JSON.stringify({ repo, files }),
+  }),
 
   // Git config
   getGitConfig: (repo: string) => request<import('@sikagit/shared').RepoConfig>(`/git/config?repo=${encodeURIComponent(repo)}`),

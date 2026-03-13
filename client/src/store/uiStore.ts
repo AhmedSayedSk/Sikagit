@@ -19,6 +19,7 @@ interface UIState {
   colDateWidth: number;
   colHashWidth: number;
   unstagedPanelRatio: number; // 0-1, proportion of unstaged panel width
+  groupFilesByFolder: boolean;
   toggleSidebar: () => void;
   setActivePanel: (panel: Panel) => void;
   setTheme: (theme: Theme) => void;
@@ -33,6 +34,7 @@ interface UIState {
   setColDateWidth: (width: number) => void;
   setColHashWidth: (width: number) => void;
   setUnstagedPanelRatio: (ratio: number) => void;
+  setGroupFilesByFolder: (v: boolean) => void;
 }
 
 const SIDEBAR_MIN = 180;
@@ -63,6 +65,7 @@ export const useUIStore = create<UIState>()(
       colDateWidth: 80,
       colHashWidth: 64,
       unstagedPanelRatio: 0.5,
+      groupFilesByFolder: true,
 
       toggleSidebar: () => set(state => ({ sidebarOpen: !state.sidebarOpen })),
       setActivePanel: (panel: Panel) => set({ activePanel: panel }),
@@ -94,6 +97,7 @@ export const useUIStore = create<UIState>()(
       setUnstagedPanelRatio: (ratio: number) => set({
         unstagedPanelRatio: clamp(ratio, 0.15, 0.85),
       }),
+      setGroupFilesByFolder: (v: boolean) => set({ groupFilesByFolder: v }),
     }),
     { name: 'sikagit-ui' }
   )

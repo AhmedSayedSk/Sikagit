@@ -129,6 +129,17 @@ router.post('/discard', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true });
 }));
 
+router.post('/delete-untracked', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { files } = req.body;
+  if (!files || !Array.isArray(files)) {
+    res.status(400).json({ success: false, error: 'Missing required field: files (array)' });
+    return;
+  }
+  await gitService.deleteUntrackedFiles(repoPath, files);
+  res.json({ success: true });
+}));
+
 router.get('/config', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const config = await gitService.getConfig(repoPath);
