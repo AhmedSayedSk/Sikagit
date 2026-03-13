@@ -1,28 +1,24 @@
-import { useState } from 'react';
-import { X, FolderKanban, Check } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { X, FolderKanban, Upload, Trash2 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useRepoStore } from '../../store/repoStore';
 import { cn } from '../../lib/utils';
 import type { Project } from '@sikagit/shared';
 
-const PROJECT_COLORS = [
-  '#7ba4f7', '#6bcf7f', '#d4a84a', '#ef6f6f',
-  '#b88cf5', '#e88ab8', '#5ccfd6', '#d4854a',
-];
-
 interface ProjectDialogProps {
-  project?: Project; // if provided, editing; otherwise creating
+  project?: Project;
   onClose: () => void;
 }
 
 export function ProjectDialog({ project, onClose }: ProjectDialogProps) {
   const repos = useRepoStore(s => s.repos);
-  const { createProject, updateProject } = useProjectStore();
+  const { createProject, updateProject, fetchProjects } = useProjectStore();
 
   const [name, setName] = useState(project?.name || '');
-  const [color, setColor] = useState(project?.color || PROJECT_COLORS[0]);
+  const [avatar, setAvatar] = useState<string | undefined>(project?.avatar);
   const [selectedRepoIds, setSelectedRepoIds] = useState<string[]>(project?.repoIds || []);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const toggleRepo = (id: string) => {
     setSelectedRepoIds(prev =>
@@ -30,18 +26,46 @@ export function ProjectDialog({ project, onClose }: ProjectDialogProps) {
     );
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 128;
+      let w = img.width;
+      let h = img.height;
+      if (w > MAX || h > MAX) {
+        const scale = Math.min(MAX / w, MAX / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, w, h);
+      setAvatar(canvas.toDataURL('image/png'));
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+
+    e.target.value = '';
+  };
+
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
     try {
       if (project) {
-        await updateProject(project.id, { name: name.trim(), color, repoIds: selectedRepoIds });
+        await updateProject(project.id, { name: name.trim(), avatar: avatar || '', repoIds: selectedRepoIds });
       } else {
-        await createProject(name.trim(), color, selectedRepoIds);
+        await createProject(name.trim(), selectedRepoIds, avatar || undefined);
       }
+      await fetchProjects();
       onClose();
-    } catch {
-      // handle error silently
+    } catch (err) {
+      console.error('Failed to save project:', err);
     } finally {
       setSaving(false);
     }
@@ -79,23 +103,42 @@ export function ProjectDialog({ project, onClose }: ProjectDialogProps) {
             />
           </div>
 
-          {/* Color */}
+          {/* Avatar */}
           <div>
-            <label className="block text-xs text-text-secondary mb-1.5 font-medium">Color</label>
-            <div className="flex gap-2">
-              {PROJECT_COLORS.map(c => (
+            <label className="block text-xs text-text-secondary mb-1.5 font-medium">Project Image</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <div className="flex items-center gap-3">
+              {avatar ? (
+                <img src={avatar} alt="Project" className="w-10 h-10 rounded-md object-cover border border-border" />
+              ) : (
+                <div className="w-10 h-10 rounded-md border border-dashed border-border flex items-center justify-center bg-bg-primary">
+                  <FolderKanban size={16} className="text-text-muted" />
+                </div>
+              )}
+              <div className="flex gap-2">
                 <button
-                  key={c}
-                  onClick={() => setColor(c)}
-                  className={cn(
-                    'w-7 h-7 rounded-full border-2 transition-all flex items-center justify-center',
-                    color === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'
-                  )}
-                  style={{ backgroundColor: c }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1.5 rounded text-xs border border-border bg-bg-primary text-text-secondary hover:text-text-primary hover:border-accent/40 transition-colors flex items-center gap-1.5"
                 >
-                  {color === c && <Check size={12} className="text-white drop-shadow" />}
+                  <Upload size={11} />
+                  {avatar ? 'Change' : 'Upload'}
                 </button>
-              ))}
+                {avatar && (
+                  <button
+                    onClick={() => setAvatar(undefined)}
+                    className="px-2.5 py-1.5 rounded text-xs border border-border bg-bg-primary text-text-secondary hover:text-danger hover:border-danger/40 transition-colors flex items-center gap-1.5"
+                  >
+                    <Trash2 size={11} />
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

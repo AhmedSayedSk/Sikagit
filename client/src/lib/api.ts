@@ -34,12 +34,12 @@ export const api = {
 
   // Projects
   getProjects: () => request<import('@sikagit/shared').Project[]>('/projects'),
-  createProject: (name: string, color: string, repoIds: string[]) =>
+  createProject: (name: string, repoIds: string[], avatar?: string) =>
     request<import('@sikagit/shared').Project>('/projects', {
       method: 'POST',
-      body: JSON.stringify({ name, color, repoIds }),
+      body: JSON.stringify({ name, avatar, repoIds }),
     }),
-  updateProject: (id: string, data: { name?: string; color?: string; repoIds?: string[] }) =>
+  updateProject: (id: string, data: { name?: string; avatar?: string; repoIds?: string[] }) =>
     request<import('@sikagit/shared').Project>(`/projects/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),

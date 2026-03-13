@@ -5,8 +5,8 @@ import { api } from '../lib/api';
 interface ProjectState {
   projects: Project[];
   fetchProjects: () => Promise<void>;
-  createProject: (name: string, color: string, repoIds?: string[]) => Promise<void>;
-  updateProject: (id: string, data: { name?: string; color?: string; repoIds?: string[] }) => Promise<void>;
+  createProject: (name: string, repoIds?: string[], avatar?: string) => Promise<void>;
+  updateProject: (id: string, data: { name?: string; avatar?: string; repoIds?: string[] }) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   addRepoToProject: (projectId: string, repoId: string) => Promise<void>;
   removeRepoFromProject: (projectId: string, repoId: string) => Promise<void>;
@@ -20,8 +20,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ projects });
   },
 
-  createProject: async (name, color, repoIds = []) => {
-    const project = await api.createProject(name, color, repoIds);
+  createProject: async (name, repoIds = [], avatar) => {
+    const project = await api.createProject(name, repoIds, avatar);
     set(state => ({ projects: [...state.projects, project] }));
   },
 

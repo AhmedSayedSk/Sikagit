@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning } from 'lucide-react';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useUIStore } from '../../store/uiStore';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 
@@ -28,6 +29,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const { unstagedPanelRatio, setUnstagedPanelRatio } = useUIStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -52,6 +54,12 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
 
   const refresh = useCallback(() => fetchStatus(repoPath), [repoPath, fetchStatus]);
 
+  // Auto-poll status every 3 seconds to detect external file changes
+  useEffect(() => {
+    const interval = setInterval(() => fetchStatus(repoPath), 3000);
+    return () => clearInterval(interval);
+  }, [repoPath, fetchStatus]);
+
   const handleSelectFile = useCallback((path: string | null, source: 'staged' | 'unstaged') => {
     selectFile(path, source);
     if (path) selectCommit(null);
@@ -59,30 +67,30 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
 
   const stageFile = async (file: string) => {
     await api.stageFiles(repoPath, [file]);
-    refresh();
+    await refresh();
   };
 
   const unstageFile = async (file: string) => {
     await api.unstageFiles(repoPath, [file]);
-    refresh();
+    await refresh();
   };
 
   const stageAll = async () => {
     if (!status) return;
     const files = [...status.unstaged.map(f => f.path), ...status.untracked];
     await api.stageFiles(repoPath, files);
-    refresh();
+    await refresh();
   };
 
   const unstageAll = async () => {
     if (!status) return;
     await api.unstageFiles(repoPath, status.staged.map(f => f.path));
-    refresh();
+    await refresh();
   };
 
   const discardFile = async (file: string) => {
     await api.discardChanges(repoPath, [file]);
-    refresh();
+    await refresh();
   };
 
   if (!status) {
@@ -141,18 +149,18 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                 >
                   <span title={label} className="flex-shrink-0"><Icon size={13} className={color} /></span>
                   <span className="flex-1 truncate">{f.path}</span>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                  <div className="flex gap-1.5 opacity-0 group-hover:opacity-100">
                     <button
                       onClick={e => { e.stopPropagation(); stageFile(f.path); }}
-                      className="text-success/70 hover:text-success"
+                      className="p-1 rounded bg-success/15 text-success/80 hover:bg-success/25 hover:text-success transition-colors"
                       title="Stage"
                     >
                       <Plus size={12} />
                     </button>
                     {f.index !== '?' && (
                       <button
-                        onClick={e => { e.stopPropagation(); discardFile(f.path); }}
-                        className="text-danger/70 hover:text-danger"
+                        onClick={e => { e.stopPropagation(); setConfirmDiscard(f.path); }}
+                        className="p-1 rounded bg-danger/15 text-danger/80 hover:bg-danger/25 hover:text-danger transition-colors"
                         title="Discard changes"
                       >
                         <RotateCcw size={12} />
@@ -218,7 +226,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                   <span className="flex-1 truncate">{f.path}</span>
                   <button
                     onClick={e => { e.stopPropagation(); unstageFile(f.path); }}
-                    className="opacity-0 group-hover:opacity-100 text-warning/70 hover:text-warning"
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded bg-warning/15 text-warning/80 hover:bg-warning/25 hover:text-warning transition-colors"
                     title="Unstage"
                   >
                     <Minus size={12} />
@@ -230,6 +238,15 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
         )}
       </div>
 
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Discard Changes"
+          message={`Are you sure you want to discard all changes to "${confirmDiscard}"? This action cannot be undone.`}
+          confirmLabel="Discard"
+          onConfirm={() => { discardFile(confirmDiscard); setConfirmDiscard(null); }}
+          onCancel={() => setConfirmDiscard(null)}
+        />
+      )}
     </div>
   );
 }

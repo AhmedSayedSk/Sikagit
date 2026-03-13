@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { GitBranch, Plus, Trash2, FolderGit2, Settings, SlidersHorizontal, FolderKanban, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, Trash2, FolderGit2, Settings, SlidersHorizontal, FolderKanban, ChevronDown, ChevronRight, Pencil, GitBranch } from 'lucide-react';
+import { getRepoIcon } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useUIStore } from '../../store/uiStore';
 import { AddRepoDialog } from '../operations/AddRepoDialog';
 import { RepoSettingsDialog } from '../operations/RepoSettingsDialog';
 import { AppSettingsDialog } from '../operations/AppSettingsDialog';
 import { ProjectDialog } from '../operations/ProjectDialog';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { cn } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
 
@@ -19,18 +22,14 @@ function RepoItem({ repo, isActive, onSelect, onSettings, onRemove }: {
   return (
     <div
       className={cn(
-        'group flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs transition-colors',
+        'group flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors',
         isActive
           ? 'bg-accent-emphasis/20 text-accent'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
       )}
       onClick={onSelect}
     >
-      {repo.avatar ? (
-        <img src={repo.avatar} alt="" className="h-5 max-w-[32px] rounded flex-shrink-0 object-contain" />
-      ) : (
-        <GitBranch size={12} className="flex-shrink-0" />
-      )}
+      {(() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
       <div className="flex-1 min-w-0">
         <div className="truncate font-medium">{repo.name}</div>
       </div>
@@ -64,23 +63,25 @@ function ProjectSection({ project, repos, activeRepoId, onSelectRepo, onSettings
   onEditProject: () => void;
   onDeleteProject: () => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
   const projectRepos = repos.filter(r => project.repoIds.includes(r.id));
+  const hasActiveRepo = activeRepoId !== null && project.repoIds.includes(activeRepoId);
+  const [expanded, setExpanded] = useState(hasActiveRepo);
 
   return (
     <div className="mb-0.5">
       {/* Project header */}
       <div
-        className="group flex items-center gap-1.5 px-2 py-1 cursor-pointer text-xs hover:bg-bg-tertiary/30 transition-colors"
+        className="group flex items-center gap-1.5 px-2 py-1 cursor-pointer hover:bg-bg-tertiary/30 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? <ChevronDown size={11} className="text-text-muted" /> : <ChevronRight size={11} className="text-text-muted" />}
-        <div
-          className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-          style={{ backgroundColor: project.color }}
-        />
+        {project.avatar ? (
+          <img src={project.avatar} alt="" className="h-4 max-w-[32px] rounded-sm flex-shrink-0 object-contain" />
+        ) : (
+          <FolderKanban size={12} className="flex-shrink-0 text-accent" />
+        )}
         <span className="flex-1 truncate font-medium text-text-primary">{project.name}</span>
-        <span className="text-[0.6rem] text-text-muted mr-1">{projectRepos.length}</span>
+        <span className="text-[0.75em] text-text-muted mr-1">{projectRepos.length}</span>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
           <button
             onClick={e => { e.stopPropagation(); onEditProject(); }}
@@ -103,7 +104,7 @@ function ProjectSection({ project, repos, activeRepoId, onSelectRepo, onSettings
       {expanded && (
         <div className="pl-2">
           {projectRepos.length === 0 ? (
-            <p className="text-[0.6rem] text-text-muted px-3 py-1">No repositories</p>
+            <p className="text-[0.75em] text-text-muted px-3 py-1">No repositories</p>
           ) : (
             projectRepos.map(repo => (
               <RepoItem
@@ -125,10 +126,13 @@ function ProjectSection({ project, repos, activeRepoId, onSelectRepo, onSettings
 export function Sidebar() {
   const { repos, activeRepoId, setActiveRepo, removeRepo } = useRepoStore();
   const { projects, fetchProjects, deleteProject } = useProjectStore();
+  const fontSize = useUIStore(s => s.fontSize);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [settingsRepo, setSettingsRepo] = useState<RepoBookmark | null>(null);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project }>({ open: false });
+  const [confirmRemoveRepo, setConfirmRemoveRepo] = useState<{ id: string; name: string } | null>(null);
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     fetchProjects();
@@ -140,12 +144,12 @@ export function Sidebar() {
   const ungroupedRepos = repos.filter(r => !assignedRepoIds.has(r.id));
 
   return (
-    <aside className="h-full bg-bg-secondary flex flex-col">
+    <aside className="h-full bg-bg-secondary flex flex-col" style={{ fontSize: fontSize - 2 }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <div className="flex items-center gap-2">
           <FolderGit2 size={16} className="text-accent" />
-          <span className="text-xs font-semibold">Repositories</span>
+          <span className="font-semibold">Repositories</span>
         </div>
         <div className="flex gap-1">
           <button
@@ -168,10 +172,10 @@ export function Sidebar() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto py-1">
         {repos.length === 0 && projects.length === 0 ? (
-          <div className="px-3 py-8 text-center text-text-muted text-xs">
+          <div className="px-3 py-8 text-center text-text-muted">
             <GitBranch size={28} className="mx-auto mb-2 opacity-50" />
             <p>No repositories</p>
-            <p className="text-[0.6rem] mt-1">Click + to add one</p>
+            <p className="text-[0.75em] mt-1">Click + to add one</p>
           </div>
         ) : (
           <>
@@ -184,9 +188,9 @@ export function Sidebar() {
                 activeRepoId={activeRepoId}
                 onSelectRepo={setActiveRepo}
                 onSettingsRepo={setSettingsRepo}
-                onRemoveRepo={removeRepo}
+                onRemoveRepo={(id) => { const r = repos.find(r => r.id === id); setConfirmRemoveRepo({ id, name: r?.name || 'this repository' }); }}
                 onEditProject={() => setProjectDialog({ open: true, project })}
-                onDeleteProject={() => deleteProject(project.id)}
+                onDeleteProject={() => setConfirmDeleteProject({ id: project.id, name: project.name })}
               />
             ))}
 
@@ -203,7 +207,7 @@ export function Sidebar() {
                 isActive={activeRepoId === repo.id}
                 onSelect={() => setActiveRepo(repo.id)}
                 onSettings={() => setSettingsRepo(repo)}
-                onRemove={() => removeRepo(repo.id)}
+                onRemove={() => setConfirmRemoveRepo({ id: repo.id, name: repo.name })}
               />
             ))}
           </>
@@ -212,7 +216,7 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-border px-3 py-2 flex items-center justify-between">
-        <span className="text-[0.625rem] text-text-muted">SikaGit</span>
+        <span className="text-[0.85em] font-semibold tracking-wide text-accent/70">SikaGit</span>
         <button
           onClick={() => setShowAppSettings(true)}
           className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
@@ -230,6 +234,24 @@ export function Sidebar() {
         <ProjectDialog
           project={projectDialog.project}
           onClose={() => setProjectDialog({ open: false })}
+        />
+      )}
+      {confirmRemoveRepo && (
+        <ConfirmDialog
+          title="Remove Repository"
+          message={`Are you sure you want to remove "${confirmRemoveRepo.name}" from SikaGit? This will not delete the repository files on disk.`}
+          confirmLabel="Remove"
+          onConfirm={() => { removeRepo(confirmRemoveRepo.id); setConfirmRemoveRepo(null); }}
+          onCancel={() => setConfirmRemoveRepo(null)}
+        />
+      )}
+      {confirmDeleteProject && (
+        <ConfirmDialog
+          title="Delete Project"
+          message={`Are you sure you want to delete the project "${confirmDeleteProject.name}"? The repositories inside will not be removed.`}
+          confirmLabel="Delete"
+          onConfirm={() => { deleteProject(confirmDeleteProject.id); setConfirmDeleteProject(null); }}
+          onCancel={() => setConfirmDeleteProject(null)}
         />
       )}
     </aside>
