@@ -2,21 +2,12 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import type { RepoBookmark } from '@sikagit/shared';
 import { normalizePath, validateGitRepo, getDisplayPath, getRepoName, isWSLPath } from '../services/pathService';
-import { load, save } from '../services/storageService';
+import * as db from '../services/db';
 
 const router = Router();
-const REPOS_FILE = 'repos.json';
-
-function getRepos(): RepoBookmark[] {
-  return load<RepoBookmark[]>(REPOS_FILE, []);
-}
-
-function saveRepos(repos: RepoBookmark[]): void {
-  save(REPOS_FILE, repos);
-}
 
 router.get('/', (_req: Request, res: Response) => {
-  res.json({ success: true, data: getRepos() });
+  res.json({ success: true, data: db.getAllRepos() });
 });
 
 router.post('/', (req: Request, res: Response) => {
@@ -35,9 +26,7 @@ router.post('/', (req: Request, res: Response) => {
     return;
   }
 
-  const repos = getRepos();
-
-  if (repos.some(r => r.path === normalized)) {
+  if (db.repoExistsByPath(normalized)) {
     res.status(409).json({ success: false, error: 'Repository already added' });
     return;
   }
@@ -52,58 +41,44 @@ router.post('/', (req: Request, res: Response) => {
     group,
   };
 
-  repos.push(bookmark);
-  saveRepos(repos);
+  db.insertRepo(bookmark);
   res.status(201).json({ success: true, data: bookmark });
 });
 
 router.delete('/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const repos = getRepos();
-  const index = repos.findIndex(r => r.id === id);
+  const id = req.params.id as string;
 
-  if (index === -1) {
+  if (!db.deleteRepo(id)) {
     res.status(404).json({ success: false, error: 'Repository not found' });
     return;
   }
 
-  repos.splice(index, 1);
-  saveRepos(repos);
   res.json({ success: true });
 });
 
 router.patch('/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { name, group, avatar } = req.body;
-  const repos = getRepos();
-  const repo = repos.find(r => r.id === id);
 
-  if (!repo) {
+  const updated = db.updateRepo(id, { name, group, avatar });
+  if (!updated) {
     res.status(404).json({ success: false, error: 'Repository not found' });
     return;
   }
 
-  if (name !== undefined) repo.name = name;
-  if (group !== undefined) repo.group = group;
-  if (avatar !== undefined) repo.avatar = avatar;
-
-  saveRepos(repos);
-  res.json({ success: true, data: repo });
+  res.json({ success: true, data: updated });
 });
 
 router.patch('/:id/open', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const repos = getRepos();
-  const repo = repos.find(r => r.id === id);
+  const id = req.params.id as string;
 
-  if (!repo) {
+  const updated = db.updateRepo(id, { lastOpened: new Date().toISOString() });
+  if (!updated) {
     res.status(404).json({ success: false, error: 'Repository not found' });
     return;
   }
 
-  repo.lastOpened = new Date().toISOString();
-  saveRepos(repos);
-  res.json({ success: true, data: repo });
+  res.json({ success: true, data: updated });
 });
 
 export default router;

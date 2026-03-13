@@ -4,6 +4,7 @@ import path from 'path';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import reposRouter from './routes/repos';
+import projectsRouter from './routes/projects';
 import gitRouter from './routes/git';
 import browseRouter from './routes/browse';
 import { errorHandler } from './middleware/errorHandler';
@@ -30,6 +31,7 @@ app.use(express.json({ limit: '5mb' }));
 
 // Routes
 app.use('/api/v1/repos', reposRouter);
+app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/git', gitRouter);
 app.use('/api/v1/browse', browseRouter);
 

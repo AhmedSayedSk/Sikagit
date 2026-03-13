@@ -2,7 +2,7 @@
 # Base stage — shared deps
 # ============================================
 FROM node:22-alpine AS base
-RUN apk add --no-cache git && git config --global safe.directory '*'
+RUN apk add --no-cache git python3 make g++ && git config --global safe.directory '*'
 WORKDIR /app
 
 # Copy workspace root + all package.json files
@@ -44,7 +44,7 @@ RUN npm run build -w client
 # Production image — serves built client + API
 # ============================================
 FROM node:22-alpine AS production
-RUN apk add --no-cache git && git config --global safe.directory '*'
+RUN apk add --no-cache git python3 make g++ && git config --global safe.directory '*'
 WORKDIR /app
 
 COPY package.json package-lock.json ./

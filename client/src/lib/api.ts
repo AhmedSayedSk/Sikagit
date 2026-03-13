@@ -32,6 +32,20 @@ export const api = {
     }),
   openRepo: (id: string) => request<import('@sikagit/shared').RepoBookmark>(`/repos/${id}/open`, { method: 'PATCH' }),
 
+  // Projects
+  getProjects: () => request<import('@sikagit/shared').Project[]>('/projects'),
+  createProject: (name: string, color: string, repoIds: string[]) =>
+    request<import('@sikagit/shared').Project>('/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name, color, repoIds }),
+    }),
+  updateProject: (id: string, data: { name?: string; color?: string; repoIds?: string[] }) =>
+    request<import('@sikagit/shared').Project>(`/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteProject: (id: string) => request<void>(`/projects/${id}`, { method: 'DELETE' }),
+
   // Git
   getStatus: (repo: string) => request<import('@sikagit/shared').GitStatus>(`/git/status?repo=${encodeURIComponent(repo)}`),
   getLog: (repo: string, limit = 200, skip = 0) =>

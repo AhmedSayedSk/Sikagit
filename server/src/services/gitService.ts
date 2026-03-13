@@ -290,8 +290,24 @@ export async function unstageFiles(repoPath: string, files: string[]): Promise<v
 
 export async function commit(repoPath: string, message: string, amend = false): Promise<string> {
   const git = getGit(repoPath);
-  const args = ['-m', message];
-  if (amend) args.push('--amend');
+
+  // Ensure author identity is available before committing
+  const hasLocal = async (key: string) => {
+    try { return !!(await git.raw(['config', '--local', key])).trim(); }
+    catch { return false; }
+  };
+  const hasGlobal = async (key: string) => {
+    try { return !!(await git.raw(['config', '--global', key])).trim(); }
+    catch { return false; }
+  };
+
+  const hasName = await hasLocal('user.name') || await hasGlobal('user.name');
+  const hasEmail = await hasLocal('user.email') || await hasGlobal('user.email');
+
+  if (!hasName || !hasEmail) {
+    throw new Error('Author identity not configured. Please set Author Name and Email in Repository Settings before committing.');
+  }
+
   const result = await git.commit(message, undefined, amend ? { '--amend': null } : {});
   return result.commit;
 }

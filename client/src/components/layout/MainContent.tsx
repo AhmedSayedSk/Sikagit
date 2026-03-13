@@ -9,7 +9,8 @@ import { FileDiffPanel } from '../diff/FileDiffPanel';
 import { FileStatusPanel } from '../files/FileStatusPanel';
 import { CommitDialog } from '../operations/CommitDialog';
 import { ResizeHandle } from '../ui/ResizeHandle';
-import { GitBranch, GitCommitHorizontal } from 'lucide-react';
+import { GitBranch, GitCommitHorizontal, FolderKanban, ChevronRight } from 'lucide-react';
+import { useProjectStore } from '../../store/projectStore';
 import { cn } from '../../lib/utils';
 
 export function MainContent() {
@@ -20,6 +21,8 @@ export function MainContent() {
   const { fetchAll, selectedFile, selectFile, status } = useStatusStore();
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const { commitListWidth, setCommitListWidth, bottomPanelHeight, setBottomPanelHeight } = useUIStore();
+  const projects = useProjectStore(s => s.projects);
+  const repoProject = activeRepoId ? projects.find(p => p.repoIds.includes(activeRepoId)) : undefined;
 
   useEffect(() => {
     if (repo) {
@@ -52,8 +55,19 @@ export function MainContent() {
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="h-10 bg-bg-secondary border-b border-border flex items-center px-3 gap-2">
-        <span className="text-sm font-medium">{repo.name}</span>
-        <span className="text-xs text-text-muted flex-1">{repo.displayPath}</span>
+        {repoProject && (
+          <div className="flex items-center gap-1.5">
+            {repoProject.avatar ? (
+              <img src={repoProject.avatar} alt="" className="h-4 max-w-[32px] rounded-sm object-contain" />
+            ) : (
+              <FolderKanban size={13} className="text-accent" />
+            )}
+            <span className="text-sm font-semibold text-text-primary">{repoProject.name}</span>
+            <ChevronRight size={14} className="text-text-muted" />
+          </div>
+        )}
+        <span className="text-sm font-semibold text-text-primary">{repo.name}</span>
+        <span className="text-xs text-text-secondary flex-1">{repo.displayPath}</span>
         <button
           onClick={() => setCommitDialogOpen(true)}
           disabled={!status || status.staged.length === 0}

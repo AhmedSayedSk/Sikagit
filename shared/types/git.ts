@@ -80,6 +80,14 @@ export interface RepoBookmark {
   avatar?: string; // base64 data URL for repo logo
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  color: string; // hex color for the project badge
+  repoIds: string[];
+  createdAt: string;
+}
+
 export interface RepoConfig {
   userName?: string;
   userEmail?: string;

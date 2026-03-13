@@ -187,7 +187,7 @@ function DiffFileSection({ file, hunkStartIndex, onStageHunk, onDiscardHunk }: {
                   {onStageHunk && (
                     <button
                       onClick={() => onStageHunk(hunkIdx, file.path)}
-                      className="px-2 py-0.5 text-[0.625rem] font-medium rounded border border-border bg-bg-secondary text-text-secondary hover:text-text-primary hover:border-accent/40 transition-colors"
+                      className="px-2 py-0.5 text-[0.625rem] font-medium rounded border border-success/25 bg-success/10 text-success/80 hover:bg-success/20 hover:text-success hover:border-success/40 transition-colors"
                     >
                       Stage hunk
                     </button>
@@ -195,7 +195,7 @@ function DiffFileSection({ file, hunkStartIndex, onStageHunk, onDiscardHunk }: {
                   {onDiscardHunk && (
                     <button
                       onClick={() => onDiscardHunk(hunkIdx, file.path)}
-                      className="px-2 py-0.5 text-[0.625rem] font-medium rounded border border-border bg-bg-secondary text-text-secondary hover:text-danger hover:border-danger/40 transition-colors"
+                      className="px-2 py-0.5 text-[0.625rem] font-medium rounded border border-danger/25 bg-danger/10 text-danger/80 hover:bg-danger/20 hover:text-danger hover:border-danger/40 transition-colors"
                     >
                       Discard hunk
                     </button>
