@@ -4,16 +4,16 @@ import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useUIStore } from '../../store/uiStore';
 import { api } from '../../lib/api';
-import { cn, getStatusColor, getStatusLabel } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 
 function getStatusIcon(index: string, workingDir: string) {
-  if (index === 'U' || workingDir === 'U') return { Icon: FileWarning, color: 'text-[var(--color-status-conflict)]' };
-  if (index === 'M' || workingDir === 'M') return { Icon: FilePen, color: 'text-[var(--color-status-modified)]' };
-  if (index === 'A') return { Icon: FilePlus2, color: 'text-[var(--color-status-added)]' };
-  if (index === 'D' || workingDir === 'D') return { Icon: FileX2, color: 'text-[var(--color-status-deleted)]' };
-  if (index === 'R') return { Icon: FileSymlink, color: 'text-[var(--color-status-renamed)]' };
-  if (index === '?') return { Icon: FileQuestion, color: 'text-[var(--color-status-untracked)]' };
-  return { Icon: FileQuestion, color: 'text-[var(--color-status-untracked)]' };
+  if (index === 'U' || workingDir === 'U') return { Icon: FileWarning, color: 'text-[var(--color-status-conflict)]', label: 'Conflicted' };
+  if (index === 'M' || workingDir === 'M') return { Icon: FilePen, color: 'text-[var(--color-status-modified)]', label: 'Modified' };
+  if (index === 'A') return { Icon: FilePlus2, color: 'text-[var(--color-status-added)]', label: 'Added' };
+  if (index === 'D' || workingDir === 'D') return { Icon: FileX2, color: 'text-[var(--color-status-deleted)]', label: 'Deleted' };
+  if (index === 'R') return { Icon: FileSymlink, color: 'text-[var(--color-status-renamed)]', label: 'Renamed' };
+  if (index === '?') return { Icon: FileQuestion, color: 'text-[var(--color-status-untracked)]', label: 'Untracked' };
+  return { Icon: FileQuestion, color: 'text-[var(--color-status-untracked)]', label: 'Unknown' };
 }
 
 interface FileStatusPanelProps {
@@ -124,7 +124,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
         {unstagedOpen && (
           <div className="flex-1 overflow-y-auto">
             {unstagedFiles.map(f => {
-              const { Icon, color } = getStatusIcon(f.index, f.workingDir);
+              const { Icon, color, label } = getStatusIcon(f.index, f.workingDir);
               return (
                 <div
                   key={f.path}
@@ -139,10 +139,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                     'unstaged'
                   )}
                 >
-                  <Icon size={13} className={cn('flex-shrink-0', color)} />
-                  <span className={cn('w-3 font-mono font-bold text-[0.6rem]', color)}>
-                    {getStatusLabel(f.index, f.workingDir)}
-                  </span>
+                  <span title={label} className="flex-shrink-0"><Icon size={13} className={color} /></span>
                   <span className="flex-1 truncate">{f.path}</span>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100">
                     <button
@@ -202,7 +199,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
         {stagedOpen && (
           <div className="flex-1 overflow-y-auto">
             {stagedFiles.map(f => {
-              const { Icon, color } = getStatusIcon(f.index, f.workingDir);
+              const { Icon, color, label } = getStatusIcon(f.index, f.workingDir);
               return (
                 <div
                   key={f.path}
@@ -217,10 +214,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                     'staged'
                   )}
                 >
-                  <Icon size={13} className={cn('flex-shrink-0', color)} />
-                  <span className={cn('w-3 font-mono font-bold text-[0.6rem]', color)}>
-                    {getStatusLabel(f.index, f.workingDir)}
-                  </span>
+                  <span title={label} className="flex-shrink-0"><Icon size={13} className={color} /></span>
                   <span className="flex-1 truncate">{f.path}</span>
                   <button
                     onClick={e => { e.stopPropagation(); unstageFile(f.path); }}
