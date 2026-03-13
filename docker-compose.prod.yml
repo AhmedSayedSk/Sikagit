@@ -1,0 +1,18 @@
+services:
+  sikagit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "3200:3001"
+    volumes:
+      - ./data:/app/server/data
+      - /home:/host/home
+      - /mnt:/host/mnt
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - DATA_DIR=/app/server/data
+      - CORS_ORIGINS=http://localhost:3200
+    restart: unless-stopped
