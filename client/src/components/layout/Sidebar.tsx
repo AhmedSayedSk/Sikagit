@@ -8,7 +8,7 @@ import { AddRepoDialog } from '../operations/AddRepoDialog';
 import { RepoSettingsDialog } from '../operations/RepoSettingsDialog';
 import { AppSettingsDialog } from '../operations/AppSettingsDialog';
 import { ProjectDialog } from '../operations/ProjectDialog';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useConfirmStore } from '../../store/confirmStore';
 import { cn } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
 
@@ -188,8 +188,7 @@ export function Sidebar() {
   const [settingsRepo, setSettingsRepo] = useState<RepoBookmark | null>(null);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project }>({ open: false });
-  const [confirmRemoveRepo, setConfirmRemoveRepo] = useState<{ id: string; name: string } | null>(null);
-  const [confirmDeleteProject, setConfirmDeleteProject] = useState<{ id: string; name: string } | null>(null);
+  const confirm = useConfirmStore(s => s.confirm);
 
   // Accordion: only one project expanded at a time; auto-expand project containing active repo
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
@@ -257,9 +256,26 @@ export function Sidebar() {
                 onToggle={() => setExpandedProjectId(expandedProjectId === project.id ? null : project.id)}
                 onSelectRepo={(id) => { setActiveRepo(id); setExpandedProjectId(project.id); }}
                 onSettingsRepo={setSettingsRepo}
-                onRemoveRepo={(id) => { const r = repos.find(r => r.id === id); setConfirmRemoveRepo({ id, name: r?.name || 'this repository' }); }}
+                onRemoveRepo={async (id) => {
+                  const r = repos.find(r => r.id === id);
+                  const confirmed = await confirm({
+                    title: 'Remove Repository',
+                    message: `Are you sure you want to remove "${r?.name || 'this repository'}" from SikaGit? This will not delete the repository files on disk.`,
+                    confirmLabel: 'Remove',
+                    variant: 'danger',
+                  });
+                  if (confirmed) removeRepo(id);
+                }}
                 onEditProject={() => setProjectDialog({ open: true, project })}
-                onDeleteProject={() => setConfirmDeleteProject({ id: project.id, name: project.name })}
+                onDeleteProject={async () => {
+                  const confirmed = await confirm({
+                    title: 'Delete Project',
+                    message: `Are you sure you want to delete the project "${project.name}"? The repositories inside will not be removed.`,
+                    confirmLabel: 'Delete',
+                    variant: 'danger',
+                  });
+                  if (confirmed) deleteProject(project.id);
+                }}
               />
             ))}
 
@@ -276,7 +292,15 @@ export function Sidebar() {
                 isActive={activeRepoId === repo.id}
                 onSelect={() => setActiveRepo(repo.id)}
                 onSettings={() => setSettingsRepo(repo)}
-                onRemove={() => setConfirmRemoveRepo({ id: repo.id, name: repo.name })}
+                onRemove={async () => {
+                  const confirmed = await confirm({
+                    title: 'Remove Repository',
+                    message: `Are you sure you want to remove "${repo.name}" from SikaGit? This will not delete the repository files on disk.`,
+                    confirmLabel: 'Remove',
+                    variant: 'danger',
+                  });
+                  if (confirmed) removeRepo(repo.id);
+                }}
               />
             ))}
           </>
@@ -306,24 +330,6 @@ export function Sidebar() {
         <ProjectDialog
           project={projectDialog.project}
           onClose={() => setProjectDialog({ open: false })}
-        />
-      )}
-      {confirmRemoveRepo && (
-        <ConfirmDialog
-          title="Remove Repository"
-          message={`Are you sure you want to remove "${confirmRemoveRepo.name}" from SikaGit? This will not delete the repository files on disk.`}
-          confirmLabel="Remove"
-          onConfirm={() => { removeRepo(confirmRemoveRepo.id); setConfirmRemoveRepo(null); }}
-          onCancel={() => setConfirmRemoveRepo(null)}
-        />
-      )}
-      {confirmDeleteProject && (
-        <ConfirmDialog
-          title="Delete Project"
-          message={`Are you sure you want to delete the project "${confirmDeleteProject.name}"? The repositories inside will not be removed.`}
-          confirmLabel="Delete"
-          onConfirm={() => { deleteProject(confirmDeleteProject.id); setConfirmDeleteProject(null); }}
-          onCancel={() => setConfirmDeleteProject(null)}
         />
       )}
     </aside>

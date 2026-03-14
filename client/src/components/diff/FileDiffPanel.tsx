@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { X, FileText } from 'lucide-react';
 import { useStatusStore } from '../../store/statusStore';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useConfirmStore } from '../../store/confirmStore';
 import { api } from '../../lib/api';
 import { DiffView } from './DiffView';
 import { ImagePreview, isImageFile } from './ImagePreview';
@@ -55,7 +55,7 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
   const { selectedFile, selectedFileSource, selectFile, fetchStatus } = useStatusStore();
   const [diff, setDiff] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [confirmDiscardHunk, setConfirmDiscardHunk] = useState<number | null>(null);
+  const confirm = useConfirmStore(s => s.confirm);
 
   const loadDiff = useCallback(() => {
     if (!selectedFile || !selectedFileSource) return;
@@ -132,19 +132,18 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
             diff={diff}
             repoPath={repoPath}
             onStageHunk={showHunkActions ? handleStageHunk : undefined}
-            onDiscardHunk={showHunkActions ? ((hunkIndex: number) => setConfirmDiscardHunk(hunkIndex)) : undefined}
+            onDiscardHunk={showHunkActions ? (async (hunkIndex: number) => {
+              const confirmed = await confirm({
+                title: 'Discard Hunk',
+                message: 'Are you sure you want to discard this hunk? This action cannot be undone.',
+                confirmLabel: 'Discard',
+                variant: 'danger',
+              });
+              if (confirmed) handleDiscardHunk(hunkIndex);
+            }) : undefined}
           />
         )}
       </div>
-      {confirmDiscardHunk !== null && (
-        <ConfirmDialog
-          title="Discard Hunk"
-          message="Are you sure you want to discard this hunk? This action cannot be undone."
-          confirmLabel="Discard"
-          onConfirm={() => { handleDiscardHunk(confirmDiscardHunk); setConfirmDiscardHunk(null); }}
-          onCancel={() => setConfirmDiscardHunk(null)}
-        />
-      )}
     </div>
   );
 }
