@@ -34,6 +34,7 @@ services:
       - "3200:5173"
     volumes:
       - ./client/src:/app/client/src
+      - ./client/public:/app/client/public
       - ./client/index.html:/app/client/index.html
       - ./shared:/app/shared
     environment:
