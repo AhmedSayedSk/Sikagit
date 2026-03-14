@@ -3,7 +3,7 @@ import type { GraphCommit, GraphConnection } from '@sikagit/shared';
 const ROW_HEIGHT = 28;
 const LANE_WIDTH = 14;
 const NODE_RADIUS = 4;
-const PADDING_LEFT = 2;
+const PADDING_LEFT = 8;
 
 const LANE_COLORS = [
   '#7ba4f7', // blue
@@ -34,15 +34,18 @@ interface CommitGraphProps {
   startIndex: number;
   endIndex: number;
   scrollOffset: number;
+  hasUncommitted?: boolean;
 }
 
-export function CommitGraph({ commits, totalLanes, startIndex, endIndex, scrollOffset }: CommitGraphProps) {
+export function CommitGraph({ commits, totalLanes, startIndex, endIndex, scrollOffset, hasUncommitted }: CommitGraphProps) {
   const width = PADDING_LEFT + Math.max(totalLanes, 1) * LANE_WIDTH + PADDING_LEFT;
   const visibleCommits = commits.slice(startIndex, endIndex);
 
   // We need extra rows above/below for connections that span into visible area
   const extraBefore = Math.max(0, startIndex - 1);
   const extraAfter = Math.min(commits.length, endIndex + 1);
+
+  const firstCommit = commits[0];
 
   return (
     <svg
@@ -55,6 +58,19 @@ export function CommitGraph({ commits, totalLanes, startIndex, endIndex, scrollO
       }}
     >
       <g transform={`translate(0, ${-startIndex * ROW_HEIGHT})`}>
+        {/* Line from uncommitted row down to first commit */}
+        {hasUncommitted && startIndex === 0 && firstCommit && (
+          <line
+            x1={laneX(firstCommit.lane)}
+            y1={0}
+            x2={laneX(firstCommit.lane)}
+            y2={rowY(0)}
+            stroke={getColor(firstCommit.laneColor)}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+        )}
+
         {/* Render connections for visible rows + a bit of context */}
         {commits.slice(extraBefore, extraAfter).map((commit, _i) => {
           const row = extraBefore + _i;
@@ -152,7 +168,7 @@ function CommitNode({
   isHead: boolean;
   isMerge: boolean;
 }) {
-  const r = isHead ? NODE_RADIUS + 2 : isMerge ? NODE_RADIUS + 1 : NODE_RADIUS;
+  const r = isHead ? NODE_RADIUS + 1 : isMerge ? NODE_RADIUS + 1 : NODE_RADIUS;
 
   return (
     <>
@@ -183,4 +199,31 @@ function CommitNode({
 /** Calculate the pixel width needed for the graph column */
 export function getGraphWidth(totalLanes: number): number {
   return PADDING_LEFT + Math.max(totalLanes, 1) * LANE_WIDTH + PADDING_LEFT;
+}
+
+/** Render an uncommitted changes node (hollow circle) with a line going down */
+export function UncommittedNode({ lane, colorIndex, width }: { lane: number; colorIndex: number; width: number }) {
+  const x = laneX(lane);
+  const cy = ROW_HEIGHT / 2;
+  const color = getColor(colorIndex);
+  return (
+    <svg
+      width={width}
+      height={ROW_HEIGHT}
+      style={{ position: 'absolute', left: 0, top: 0 }}
+    >
+      {/* Line from circle down to bottom edge */}
+      <line
+        x1={x} y1={cy + NODE_RADIUS}
+        x2={x} y2={ROW_HEIGHT}
+        stroke={color} strokeWidth={2} strokeLinecap="round"
+      />
+      {/* Hollow circle */}
+      <circle
+        cx={x} cy={cy} r={NODE_RADIUS}
+        fill="var(--color-bg-primary)"
+        stroke={color} strokeWidth={2}
+      />
+    </svg>
+  );
 }

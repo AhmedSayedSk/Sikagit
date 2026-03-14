@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning } from 'lucide-react';
-// ChevronDown/ChevronRight used by FolderSection
+import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitCommitHorizontal, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning } from 'lucide-react';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useUIStore } from '../../store/uiStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { CommitDialog } from '../operations/CommitDialog';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import type { GitFileStatus } from '@sikagit/shared';
@@ -118,6 +118,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const [dragging, setDragging] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [collapsedUnstagedFolders, setCollapsedUnstagedFolders] = useState<Set<string>>(new Set());
   const [collapsedStagedFolders, setCollapsedStagedFolders] = useState<Set<string>>(new Set());
 
@@ -155,18 +156,32 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     if (path) selectCommit(null);
   }, [selectFile, selectCommit]);
 
+  const selectNextInList = useCallback((list: GitFileStatus[], file: string, source: 'staged' | 'unstaged') => {
+    if (selectedFile !== file || selectedFileSource !== source) return;
+    const idx = list.findIndex(f => f.path === file);
+    if (list.length <= 1) {
+      selectFile(null);
+    } else {
+      const next = idx < list.length - 1 ? list[idx + 1] : list[idx - 1];
+      selectFile(next.path, source);
+    }
+  }, [selectedFile, selectedFileSource, selectFile]);
+
   const stageFile = async (file: string) => {
+    selectNextInList(unstagedFiles, file, 'unstaged');
     await api.stageFiles(repoPath, [file]);
     await refresh();
   };
 
   const unstageFile = async (file: string) => {
+    selectNextInList(status?.staged ?? [], file, 'staged');
     await api.unstageFiles(repoPath, [file]);
     await refresh();
   };
 
   const stageAll = async () => {
     if (!status) return;
+    selectFile(null);
     const files = [...status.unstaged.map(f => f.path), ...status.untracked];
     await api.stageFiles(repoPath, files);
     await refresh();
@@ -174,16 +189,19 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
 
   const unstageAll = async () => {
     if (!status) return;
+    selectFile(null);
     await api.unstageFiles(repoPath, status.staged.map(f => f.path));
     await refresh();
   };
 
   const discardFile = async (file: string) => {
+    selectNextInList(unstagedFiles, file, 'unstaged');
     await api.discardChanges(repoPath, [file]);
     await refresh();
   };
 
   const deleteFile = async (file: string) => {
+    selectNextInList(unstagedFiles, file, 'unstaged');
     await api.deleteUntrackedFiles(repoPath, [file]);
     await refresh();
   };
@@ -319,16 +337,31 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
           <div className="flex items-center gap-1">
             Staged ({stagedFiles.length})
           </div>
-          {stagedFiles.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            {stagedFiles.length > 0 && (
+              <button
+                onClick={() => unstageAll()}
+                className="px-1.5 py-0.5 rounded border border-warning/40 bg-warning/15 text-warning hover:bg-warning/25 hover:border-warning/60 flex items-center gap-1 transition-colors"
+                title="Unstage all"
+              >
+                <Minus size={10} />
+                <span className="text-[0.6rem] font-medium">Unstage All</span>
+              </button>
+            )}
             <button
-              onClick={() => unstageAll()}
-              className="px-1.5 py-0.5 rounded border border-warning/40 bg-warning/15 text-warning hover:bg-warning/25 hover:border-warning/60 flex items-center gap-1 transition-colors"
-              title="Unstage all"
+              onClick={() => setCommitDialogOpen(true)}
+              disabled={stagedFiles.length === 0}
+              className={cn(
+                'px-1.5 py-0.5 rounded border flex items-center gap-1 transition-colors',
+                stagedFiles.length > 0
+                  ? 'border-accent/40 bg-accent-emphasis/15 text-accent hover:bg-accent-emphasis/25 hover:border-accent/60 cursor-pointer'
+                  : 'border-border bg-bg-tertiary text-text-muted/40 cursor-not-allowed'
+              )}
             >
-              <Minus size={10} />
-              <span className="text-[0.6rem] font-medium">Unstage All</span>
+              <GitCommitHorizontal size={10} />
+              <span className="text-[0.6rem] font-medium">Commit</span>
             </button>
-          )}
+          </div>
         </div>
         {stagedOpen && (
           <div className="flex-1 overflow-y-auto">
@@ -382,6 +415,13 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
           confirmLabel="Delete"
           onConfirm={() => { deleteFile(confirmDelete); setConfirmDelete(null); }}
           onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+      {commitDialogOpen && (
+        <CommitDialog
+          repoPath={repoPath}
+          stagedCount={stagedFiles.length}
+          onClose={() => setCommitDialogOpen(false)}
         />
       )}
     </div>

@@ -4,7 +4,7 @@ import { useLogStore } from '../../store/logStore';
 import { useStatusStore } from '../../store/statusStore';
 import { useUIStore } from '../../store/uiStore';
 import { CommitRow } from './CommitRow';
-import { CommitGraph, getGraphWidth } from '../graph/CommitGraph';
+import { CommitGraph, getGraphWidth, UncommittedNode } from '../graph/CommitGraph';
 import { ColumnResizeHandle } from '../ui/ColumnResizeHandle';
 import { cn } from '../../lib/utils';
 
@@ -93,13 +93,20 @@ export function CommitList({ repoPath }: CommitListProps) {
         {hasUncommitted && (
           <div
             className={cn(
-              'flex items-center h-7 px-3 text-xs cursor-default border-b border-border/30',
+              'relative flex items-center h-7 px-3 text-xs cursor-default border-b border-border/30',
               'bg-warning/8 text-warning'
             )}
             style={{ height: ROW_HEIGHT }}
           >
+            {commits[0] && (
+              <UncommittedNode
+                lane={commits[0].lane}
+                colorIndex={commits[0].laneColor}
+                width={graphWidth}
+              />
+            )}
             <span style={{ width: graphWidth }} className="flex-shrink-0" />
-            <span className="flex-1 ml-2 font-medium">
+            <span className="flex-1 truncate ml-2 font-medium">
               Uncommitted changes
               <span className="ml-2 font-normal text-text-muted">
                 ({(status?.staged.length || 0)} staged, {(status?.unstaged.length || 0) + (status?.untracked.length || 0)} unstaged)
@@ -122,6 +129,7 @@ export function CommitList({ repoPath }: CommitListProps) {
               startIndex={startIndex}
               endIndex={endIndex}
               scrollOffset={scrollTop - uncommittedOffset}
+              hasUncommitted={!!hasUncommitted}
             />
           )}
 
@@ -136,6 +144,7 @@ export function CommitList({ repoPath }: CommitListProps) {
                 width: '100%',
                 height: `${virtualItem.size}px`,
                 transform: `translateY(${virtualItem.start}px)`,
+                overflow: 'hidden',
               }}
             >
               <CommitRow

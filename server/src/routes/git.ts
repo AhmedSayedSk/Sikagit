@@ -161,4 +161,40 @@ router.post('/config', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true });
 }));
 
+router.post('/remote-url', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { url } = req.body;
+  if (url === undefined) {
+    res.status(400).json({ success: false, error: 'Missing required field: url' });
+    return;
+  }
+  await gitService.setRemoteUrl(repoPath, url);
+  res.json({ success: true });
+}));
+
+router.post('/test-remote', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const result = await gitService.testRemoteConnection(repoPath);
+  res.json({ success: true, data: result });
+}));
+
+router.post('/fetch', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  await gitService.gitFetch(repoPath);
+  res.json({ success: true });
+}));
+
+router.post('/pull', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const message = await gitService.gitPull(repoPath);
+  res.json({ success: true, data: { message } });
+}));
+
+router.post('/push', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { setUpstream } = req.body;
+  const message = await gitService.gitPush(repoPath, setUpstream);
+  res.json({ success: true, data: { message } });
+}));
+
 export default router;

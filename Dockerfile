@@ -2,7 +2,7 @@
 # Base stage — shared deps
 # ============================================
 FROM node:22-alpine AS base
-RUN apk add --no-cache git python3 make g++ && git config --global safe.directory '*'
+RUN apk add --no-cache git openssh-client python3 make g++ && git config --global safe.directory '*'
 WORKDIR /app
 
 # Copy workspace root + all package.json files
@@ -23,7 +23,10 @@ COPY client/ client/
 # ============================================
 FROM base AS dev-server
 WORKDIR /app
+COPY server/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 EXPOSE 3001
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["npm", "run", "dev", "-w", "server"]
 
 # ============================================
@@ -44,7 +47,7 @@ RUN npm run build -w client
 # Production image — serves built client + API
 # ============================================
 FROM node:22-alpine AS production
-RUN apk add --no-cache git python3 make g++ && git config --global safe.directory '*'
+RUN apk add --no-cache git openssh-client python3 make g++ && git config --global safe.directory '*'
 WORKDIR /app
 
 COPY package.json package-lock.json ./
