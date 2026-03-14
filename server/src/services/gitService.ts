@@ -362,35 +362,19 @@ export async function unstageFiles(repoPath: string, files: string[]): Promise<v
 }
 
 export async function commit(repoPath: string, message: string, amend = false): Promise<string> {
-  const git = getGit(repoPath);
+  const author = await getAuthorIdentity(repoPath);
 
-  // Read author identity: local repo config → container global → host global gitconfig
-  const getVal = async (key: string): Promise<string> => {
-    try {
-      const local = (await git.raw(['config', '--local', key])).trim();
-      if (local) return local;
-    } catch { /* not set locally */ }
-    try {
-      const global = (await git.raw(['config', '--global', key])).trim();
-      if (global) return global;
-    } catch { /* not set globally */ }
-    return readHostGitConfig(key);
-  };
-
-  const authorName = await getVal('user.name');
-  const authorEmail = await getVal('user.email');
-
-  if (!authorName || !authorEmail) {
+  if (!author.name || !author.email) {
     throw new Error('Author identity not configured. Please set Author Name and Email in Repository Settings before committing.');
   }
 
-  // Use execSync with -c flags to pass author identity directly, bypassing container's missing global config
   const normalized = normalizePath(repoPath);
   const amendFlag = amend ? ' --amend' : '';
   const escapedMessage = message.replace(/'/g, "'\\''");
-  const cmd = `git -c user.name='${authorName.replace(/'/g, "'\\''")}' -c user.email='${authorEmail.replace(/'/g, "'\\''")}' commit -m '${escapedMessage}'${amendFlag}`;
+  const escapedName = author.name.replace(/'/g, "'\\''");
+  const escapedEmail = author.email.replace(/'/g, "'\\''");
+  const cmd = `git -c user.name='${escapedName}' -c user.email='${escapedEmail}' commit -m '${escapedMessage}'${amendFlag}`;
   const result = execSync(cmd, { cwd: normalized, encoding: 'utf-8' });
-  // Extract commit hash from output like "[branch abc1234] message"
   const match = result.match(/\[[\w/.-]+\s+([a-f0-9]+)\]/);
   return match ? match[1] : '';
 }
@@ -483,21 +467,73 @@ export async function gitFetch(repoPath: string): Promise<void> {
   await git.fetch('origin');
 }
 
-export async function gitPull(repoPath: string): Promise<string> {
+async function getAuthorIdentity(repoPath: string): Promise<{ name: string; email: string }> {
   const git = getGit(repoPath);
+  const getVal = async (key: string): Promise<string> => {
+    try {
+      const local = (await git.raw(['config', '--local', key])).trim();
+      if (local) return local;
+    } catch { /* not set locally */ }
+    try {
+      const global = (await git.raw(['config', '--global', key])).trim();
+      if (global) return global;
+    } catch { /* not set globally */ }
+    return readHostGitConfig(key);
+  };
+  return { name: await getVal('user.name'), email: await getVal('user.email') };
+}
+
+export async function gitPull(repoPath: string, strategy?: 'merge' | 'rebase'): Promise<string> {
+  const git = getGit(repoPath);
+  const normalized = normalizePath(repoPath);
   const status = await git.status();
+
+  const doPull = async (remote?: string, branch?: string) => {
+    try {
+      // For merge strategy, we need author identity for the merge commit
+      const needsIdentity = strategy === 'merge';
+      const pullArgs: string[] = [];
+
+      if (strategy === 'rebase') pullArgs.push('--rebase');
+      else if (strategy === 'merge') pullArgs.push('--no-rebase');
+
+      if (remote) pullArgs.push(remote);
+      if (branch) pullArgs.push(branch);
+
+      let output: string;
+      if (needsIdentity) {
+        const author = await getAuthorIdentity(repoPath);
+        if (!author.name || !author.email) {
+          throw new Error('Author identity not configured. Please set Author Name and Email in Repository Settings.');
+        }
+        const escapedName = author.name.replace(/'/g, "'\\''");
+        const escapedEmail = author.email.replace(/'/g, "'\\''");
+        const cmd = `git -c user.name='${escapedName}' -c user.email='${escapedEmail}' pull ${pullArgs.join(' ')}`;
+        output = execSync(cmd, { cwd: normalized, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 });
+      } else {
+        output = await git.raw(['pull', ...pullArgs]);
+      }
+
+      if (output.includes('Already up to date')) return 'Already up to date';
+      const changesMatch = output.match(/(\d+) files? changed/);
+      return changesMatch ? `${changesMatch[1]} file(s) changed` : 'Pulled successfully';
+    } catch (err: any) {
+      if (err.message?.includes('Need to specify how to reconcile divergent branches') ||
+          err.message?.includes('need to specify how to reconcile divergent branches')) {
+        throw new Error('DIVERGED');
+      }
+      throw err;
+    }
+  };
+
   if (status.tracking) {
-    // Has upstream — simple pull
-    const result = await git.pull();
-    return result.summary.changes ? `${result.summary.changes} file(s) changed` : 'Already up to date';
+    return doPull();
   }
-  // No upstream — pull current branch from origin
+
   const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
   try {
-    const result = await git.pull('origin', branch);
-    return result.summary.changes ? `${result.summary.changes} file(s) changed` : 'Already up to date';
+    return await doPull('origin', branch);
   } catch (err: any) {
-    // Branch doesn't exist on remote (e.g. local is "master" but remote has "main")
     if (err.message?.includes("couldn't find remote ref")) {
       throw new Error(`Branch "${branch}" does not exist on the remote. Push first to create it, or set an upstream branch.`);
     }
@@ -505,10 +541,17 @@ export async function gitPull(repoPath: string): Promise<string> {
   }
 }
 
-export async function gitPush(repoPath: string, setUpstream?: boolean): Promise<string> {
+export async function gitPush(repoPath: string, setUpstream?: boolean, upToCommit?: string): Promise<string> {
   const git = getGit(repoPath);
+  const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+
+  if (upToCommit) {
+    // Push only up to a specific commit: git push origin <hash>:refs/heads/<branch>
+    await git.push(['origin', `${upToCommit}:refs/heads/${branch}`]);
+    return `Pushed up to ${upToCommit.slice(0, 7)}`;
+  }
+
   if (setUpstream) {
-    const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
     await git.push(['--set-upstream', 'origin', branch]);
     return `Pushed and set upstream for ${branch}`;
   }
