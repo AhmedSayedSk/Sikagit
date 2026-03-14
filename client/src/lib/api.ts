@@ -91,6 +91,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo, message, amend }),
   }),
+  uncommit: (repo: string, hash: string) => request<void>('/git/uncommit', {
+    method: 'POST',
+    body: JSON.stringify({ repo, hash }),
+  }),
   discardChanges: (repo: string, files: string[]) => request<void>('/git/discard', {
     method: 'POST',
     body: JSON.stringify({ repo, files }),

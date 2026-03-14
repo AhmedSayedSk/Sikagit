@@ -119,6 +119,17 @@ router.post('/commit', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: { hash: commitHash } });
 }));
 
+router.post('/uncommit', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { hash } = req.body;
+  if (!hash) {
+    res.status(400).json({ success: false, error: 'Missing required field: hash' });
+    return;
+  }
+  await withRepoLock(repoPath, () => gitService.uncommit(repoPath, hash));
+  res.json({ success: true });
+}));
+
 router.post('/discard', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const { files } = req.body;
