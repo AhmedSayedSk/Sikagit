@@ -8,9 +8,8 @@ import { CommitDetail } from '../log/CommitDetail';
 import { FileDiffPanel } from '../diff/FileDiffPanel';
 import { FileStatusPanel } from '../files/FileStatusPanel';
 import { ResizeHandle } from '../ui/ResizeHandle';
-import { GitBranch, FolderKanban, ChevronRight, Cloud, CloudOff, ArrowUp, ArrowDown, RefreshCw, Loader2 } from 'lucide-react';
+import { GitBranch, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
-import { Tooltip } from '../ui/Tooltip';
 import { cn } from '../../lib/utils';
 import { api } from '../../lib/api';
 import { useToastStore } from '../../store/toastStore';
@@ -167,63 +166,32 @@ export function MainContent() {
           </div>
         )}
 
-        {/* Remote status badge */}
+        {/* Remote status text */}
         {status && (
-          hasRemote ? (
-            <Tooltip content={
-              <>
-                <span className="font-semibold text-accent">Remote: </span>
-                <span className="text-text-primary">{status.tracking || status.remoteUrl}</span>
+          <>
+            {hasRemote && <div className="w-px h-4 bg-border mx-1" />}
+            {hasRemote ? (
+              <span className="text-[0.65rem] text-text-secondary cursor-default">
                 {status.tracking ? (
                   <>
-                    {status.ahead > 0 && (
-                      <div className="mt-1 text-success">{status.ahead} commit{status.ahead > 1 ? 's' : ''} ahead — ready to push</div>
-                    )}
-                    {status.behind > 0 && (
-                      <div className="mt-1 text-warning">{status.behind} commit{status.behind > 1 ? 's' : ''} behind — pull to update</div>
-                    )}
-                    {status.ahead === 0 && status.behind === 0 && (
-                      <div className="mt-1 text-text-secondary">Up to date with remote</div>
+                    {status.ahead > 0 && status.behind > 0 ? (
+                      <>{status.ahead} {status.ahead === 1 ? 'commit' : 'commits'} to push, {status.behind} to pull</>
+                    ) : status.ahead > 0 ? (
+                      <span className="text-accent">{status.ahead} {status.ahead === 1 ? 'commit' : 'commits'} to push</span>
+                    ) : status.behind > 0 ? (
+                      <span className="text-warning">{status.behind} {status.behind === 1 ? 'commit' : 'commits'} to pull</span>
+                    ) : (
+                      <span className="text-text-muted">Synced with remote</span>
                     )}
                   </>
                 ) : (
-                  <div className="mt-1 text-text-muted">No upstream set — push to set upstream</div>
+                  <span className="text-text-muted">No upstream — push to set</span>
                 )}
-              </>
-            }>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent/10 border border-accent/20 cursor-default">
-                <Cloud size={12} className="text-accent" />
-                {status.tracking ? (
-                  <>
-                    {status.ahead > 0 && (
-                      <span className="text-[0.65rem] font-semibold font-mono text-accent">↑{status.ahead} {status.ahead === 1 ? 'commit' : 'commits'}</span>
-                    )}
-                    {status.behind > 0 && (
-                      <span className="text-[0.65rem] font-semibold font-mono text-warning">↓{status.behind} {status.behind === 1 ? 'commit' : 'commits'}</span>
-                    )}
-                    {status.ahead === 0 && status.behind === 0 && (
-                      <span className="text-[0.65rem] font-medium text-accent/80 tracking-wide">Synced</span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-[0.65rem] font-medium text-accent/80 tracking-wide">Remote</span>
-                )}
-              </div>
-            </Tooltip>
-          ) : (
-            <Tooltip content={
-              <>
-                <div className="font-semibold text-text-primary">Local repository</div>
-                <div className="mt-1 text-text-secondary">No remote configured.</div>
-                <div className="mt-1 text-text-muted">Add a remote in repository settings.</div>
-              </>
-            }>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-bg-tertiary/50 border border-border/40 cursor-default">
-                <CloudOff size={12} className="text-text-secondary" />
-                <span className="text-[0.65rem] font-medium text-text-secondary tracking-wide">Local</span>
-              </div>
-            </Tooltip>
-          )
+              </span>
+            ) : (
+              <span className="text-[0.65rem] text-text-muted cursor-default">Local — no remote configured</span>
+            )}
+          </>
         )}
       </div>
 
