@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Settings, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Settings, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import type { RepoBookmark } from '@sikagit/shared';
 import { useRepoStore } from '../../store/repoStore';
 import { useStatusStore } from '../../store/statusStore';
@@ -11,6 +11,8 @@ interface RepoSettingsDialogProps {
   repo: RepoBookmark;
   onClose: () => void;
 }
+
+type RemoteStatus = 'idle' | 'checking' | 'valid' | 'invalid';
 
 export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const updateRepo = useRepoStore(s => s.updateRepo);
@@ -29,7 +31,11 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [warning, setWarning] = useState('');
+
+  // Remote URL validation
+  const [remoteStatus, setRemoteStatus] = useState<RemoteStatus>('idle');
+  const [remoteError, setRemoteError] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     api.getGitConfig(repo.path)
@@ -38,15 +44,74 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
         setUserEmail(config.userEmail || '');
         setRemoteUrl(config.remoteUrl || '');
         setOriginalRemoteUrl(config.remoteUrl || '');
+        // Mark existing remote as valid
+        if (config.remoteUrl) setRemoteStatus('valid');
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [repo.path]);
 
+  const validateRemoteUrl = useCallback(async (url: string) => {
+    if (!url.trim()) {
+      setRemoteStatus('idle');
+      setRemoteError('');
+      return;
+    }
+
+    setRemoteStatus('checking');
+    setRemoteError('');
+
+    try {
+      // Test the URL directly without modifying the remote
+      const result = await api.testRemote(repo.path, url.trim());
+
+      if (result.ok) {
+        setRemoteStatus('valid');
+        setRemoteError('');
+      } else {
+        setRemoteStatus('invalid');
+        setRemoteError(result.error || 'Connection failed');
+      }
+    } catch {
+      setRemoteStatus('invalid');
+      setRemoteError('Failed to test connection');
+    }
+  }, [repo.path]);
+
+  const handleRemoteUrlChange = (value: string) => {
+    setRemoteUrl(value);
+    setRemoteError('');
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!value.trim()) {
+      setRemoteStatus('idle');
+      return;
+    }
+
+    if (value.trim() === originalRemoteUrl) {
+      setRemoteStatus('valid');
+      return;
+    }
+
+    setRemoteStatus('checking');
+    debounceRef.current = setTimeout(() => {
+      validateRemoteUrl(value);
+    }, 800);
+  };
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
+
+  const remoteUrlChanged = remoteUrl.trim() !== originalRemoteUrl;
+  const remoteBlocking = remoteUrlChanged && remoteUrl.trim() !== '' && remoteStatus !== 'valid';
+  const canSave = !saving && !remoteBlocking;
+
   const handleSave = async () => {
     setSaving(true);
     setError('');
-    setWarning('');
     try {
       await updateRepo(repo.id, {
         name: name.trim() || repo.name,
@@ -61,22 +126,9 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
         await api.setGitConfig(repo.path, key, value);
       }
 
-      // Update remote URL if changed
-      if (remoteUrl.trim() !== originalRemoteUrl) {
+      // Update remote URL if changed (already set during validation, but ensure it's set)
+      if (remoteUrlChanged) {
         await api.setRemoteUrl(repo.path, remoteUrl.trim());
-
-        // Test connection if a URL was set
-        if (remoteUrl.trim()) {
-          const result = await api.testRemote(repo.path);
-          if (!result.ok) {
-            // Save succeeds but warn user about connection
-            setWarning('Remote URL saved but connection test failed. Please check the URL and try again.');
-            setOriginalRemoteUrl(remoteUrl.trim());
-            setSaving(false);
-            fetchAll(repo.path);
-            return;
-          }
-        }
       }
 
       // Refresh status so toolbar updates
@@ -185,14 +237,38 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
               {/* Remote URL */}
               <div>
                 <label className="block text-xs text-text-secondary mb-1.5 font-medium">Remote URL (origin)</label>
-                <input
-                  type="text"
-                  value={remoteUrl}
-                  onChange={e => setRemoteUrl(e.target.value)}
-                  placeholder="https://github.com/user/repo.git"
-                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary font-mono text-xs focus:outline-none focus:border-accent"
-                />
-                <p className="text-[0.6rem] text-text-muted mt-1">Set the origin remote URL to connect this repo to GitHub or another host</p>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={remoteUrl}
+                    onChange={e => handleRemoteUrlChange(e.target.value)}
+                    placeholder="https://github.com/user/repo.git"
+                    className={cn(
+                      'w-full bg-bg-primary border rounded px-3 py-2 pr-9 text-sm text-text-primary font-mono text-xs focus:outline-none transition-colors',
+                      remoteStatus === 'valid' ? 'border-success/50 focus:border-success' :
+                      remoteStatus === 'invalid' ? 'border-danger/50 focus:border-danger' :
+                      'border-border focus:border-accent'
+                    )}
+                  />
+                  {/* Status icon */}
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                    {remoteStatus === 'checking' && <Loader2 size={14} className="animate-spin text-text-muted" />}
+                    {remoteStatus === 'valid' && <CheckCircle2 size={14} className="text-success" />}
+                    {remoteStatus === 'invalid' && <XCircle size={14} className="text-danger" />}
+                  </div>
+                </div>
+                {remoteStatus === 'invalid' && remoteError && (
+                  <p className="text-[0.6rem] text-danger mt-1">{remoteError}</p>
+                )}
+                {remoteStatus === 'checking' && (
+                  <p className="text-[0.6rem] text-text-muted mt-1">Checking connection...</p>
+                )}
+                {remoteStatus === 'valid' && remoteUrlChanged && (
+                  <p className="text-[0.6rem] text-success mt-1">Connected successfully</p>
+                )}
+                {remoteStatus === 'idle' && (
+                  <p className="text-[0.6rem] text-text-muted mt-1">Set the origin remote URL to connect this repo to GitHub or another host</p>
+                )}
               </div>
 
               {/* Path (read-only info) */}
@@ -214,9 +290,6 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
           {error && (
             <p className="text-danger text-xs">{error}</p>
           )}
-          {warning && (
-            <p className="text-warning text-xs">{warning}</p>
-          )}
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={onClose}
@@ -226,8 +299,8 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
-              className="px-3 py-1.5 rounded text-xs font-medium bg-accent-emphasis hover:bg-accent text-white disabled:opacity-50 transition-colors"
+              disabled={!canSave}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-accent-emphasis hover:bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {saving ? 'Saving...' : 'Save Settings'}
             </button>

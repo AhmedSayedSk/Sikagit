@@ -100,6 +100,7 @@ export interface GitStatus {
   tracking: string | null;
   ahead: number;
   behind: number;
+  remoteUrl?: string; // origin URL when no upstream tracking is set
   files: GitFileStatus[];
   staged: GitFileStatus[];
   unstaged: GitFileStatus[];

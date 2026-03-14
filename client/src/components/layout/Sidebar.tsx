@@ -192,11 +192,14 @@ export function Sidebar() {
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<{ id: string; name: string } | null>(null);
 
   // Accordion: only one project expanded at a time; auto-expand project containing active repo
-  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(() => {
-    if (!activeRepoId) return null;
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+
+  // Auto-expand project containing the active repo (on load, refresh, or repo change)
+  useEffect(() => {
+    if (!activeRepoId) return;
     const p = projects.find(p => p.repoIds.includes(activeRepoId));
-    return p?.id ?? null;
-  });
+    if (p) setExpandedProjectId(p.id);
+  }, [activeRepoId, projects]);
 
   useEffect(() => {
     fetchProjects();

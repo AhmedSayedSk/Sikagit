@@ -48,11 +48,21 @@ export async function getStatus(repoPath: string): Promise<GitStatus> {
 
   const files = status.files.map(mapFile);
 
+  // Check if a remote 'origin' exists even if no upstream is set
+  let remoteUrl: string | null = null;
+  if (!status.tracking) {
+    try {
+      const url = (await git.raw(['remote', 'get-url', 'origin'])).trim();
+      if (url) remoteUrl = url;
+    } catch { /* no remote */ }
+  }
+
   return {
     current: status.current,
     tracking: status.tracking,
     ahead: status.ahead,
     behind: status.behind,
+    remoteUrl: remoteUrl || undefined,
     files,
     staged: files.filter(f => f.isStaged),
     unstaged: files.filter(f => f.workingDir !== ' ' && f.workingDir !== '?' && f.workingDir !== '!'),
@@ -407,10 +417,12 @@ export async function setRemoteUrl(repoPath: string, url: string): Promise<void>
   }
 }
 
-export async function testRemoteConnection(repoPath: string): Promise<{ ok: boolean; error?: string }> {
+export async function testRemoteConnection(repoPath: string, url?: string): Promise<{ ok: boolean; error?: string }> {
   const normalized = normalizePath(repoPath);
   try {
-    execSync('git ls-remote --exit-code origin HEAD', { cwd: normalized, encoding: 'utf-8', timeout: 15000, stdio: 'pipe' });
+    // Test URL directly if provided, otherwise test origin
+    const target = url ? `'${url.replace(/'/g, "'\\''")}'` : 'origin';
+    execSync(`git ls-remote ${target}`, { cwd: normalized, encoding: 'utf-8', timeout: 15000, stdio: 'pipe' });
     return { ok: true };
   } catch (err: any) {
     const msg = err.stderr?.trim() || err.message || 'Connection failed';

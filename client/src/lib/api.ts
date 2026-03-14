@@ -110,9 +110,9 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo, url }),
   }),
-  testRemote: (repo: string) => request<{ ok: boolean; error?: string }>('/git/test-remote', {
+  testRemote: (repo: string, url?: string) => request<{ ok: boolean; error?: string }>('/git/test-remote', {
     method: 'POST',
-    body: JSON.stringify({ repo }),
+    body: JSON.stringify({ repo, url }),
   }),
   gitFetch: (repo: string) => request<void>('/git/fetch', {
     method: 'POST',
