@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitC
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useUIStore } from '../../store/uiStore';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useConfirmStore } from '../../store/confirmStore';
 import { CommitDialog } from '../operations/CommitDialog';
 import { SmartCommitDialog } from '../operations/SmartCommitDialog';
 import { api } from '../../lib/api';
@@ -117,8 +117,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const { unstagedPanelRatio, setUnstagedPanelRatio, groupFilesByFolder } = useUIStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const confirm = useConfirmStore(s => s.confirm);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [smartCommitOpen, setSmartCommitOpen] = useState(false);
   const { aiEnabled, aiApiKey } = useUIStore();
@@ -298,7 +297,16 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                         </button>
                         {f.index === '?' ? (
                           <button
-                            onClick={e => { e.stopPropagation(); setConfirmDelete(f.path); }}
+                            onClick={async e => {
+                              e.stopPropagation();
+                              const confirmed = await confirm({
+                                title: 'Delete File',
+                                message: `Are you sure you want to permanently delete "${f.path}"? This action cannot be undone.`,
+                                confirmLabel: 'Delete',
+                                variant: 'danger',
+                              });
+                              if (confirmed) deleteFile(f.path);
+                            }}
                             className="p-1 rounded bg-danger/15 text-danger/80 hover:bg-danger/25 hover:text-danger transition-colors"
                             title="Delete file"
                           >
@@ -306,7 +314,16 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                           </button>
                         ) : (
                           <button
-                            onClick={e => { e.stopPropagation(); setConfirmDiscard(f.path); }}
+                            onClick={async e => {
+                              e.stopPropagation();
+                              const confirmed = await confirm({
+                                title: 'Discard Changes',
+                                message: `Are you sure you want to discard all changes to "${f.path}"? This action cannot be undone.`,
+                                confirmLabel: 'Discard',
+                                variant: 'danger',
+                              });
+                              if (confirmed) discardFile(f.path);
+                            }}
                             className="p-1 rounded bg-danger/15 text-danger/80 hover:bg-danger/25 hover:text-danger transition-colors"
                             title="Discard changes"
                           >
@@ -417,25 +434,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
         )}
       </div>
 
-      {confirmDiscard && (
-        <ConfirmDialog
-          title="Discard Changes"
-          message={`Are you sure you want to discard all changes to "${confirmDiscard}"? This action cannot be undone.`}
-          confirmLabel="Discard"
-          onConfirm={() => { discardFile(confirmDiscard); setConfirmDiscard(null); }}
-          onCancel={() => setConfirmDiscard(null)}
-        />
-      )}
-      {confirmDelete && (
-        <ConfirmDialog
-          title="Delete File"
-          message={`Are you sure you want to permanently delete "${confirmDelete}"? This action cannot be undone.`}
-          confirmLabel="Delete"
-          onConfirm={() => { deleteFile(confirmDelete); setConfirmDelete(null); }}
-          onCancel={() => setConfirmDelete(null)}
-        />
-      )}
-      {commitDialogOpen && (
+{commitDialogOpen && (
         <CommitDialog
           repoPath={repoPath}
           stagedCount={stagedFiles.length}
