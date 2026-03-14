@@ -285,7 +285,10 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-border px-3 py-2 flex items-center justify-between">
-        <span className="text-[0.85em] font-semibold tracking-wide text-accent/70">SikaGit</span>
+        <div className="flex items-center gap-1.5">
+          <img src="/logo.png" alt="SikaGit" className="h-4 w-4 rounded-sm" />
+          <span className="text-[0.85em] font-semibold tracking-wide text-accent/70">SikaGit</span>
+        </div>
         <button
           onClick={() => setShowAppSettings(true)}
           className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
