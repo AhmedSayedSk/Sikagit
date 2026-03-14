@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { X, Copy, Check, GitCommitHorizontal, User, Calendar, GitFork } from 'lucide-react';
+import { X, Copy, Check, GitCommitHorizontal, User, Calendar, GitFork, Undo2, Loader2 } from 'lucide-react';
 import { useLogStore } from '../../store/logStore';
+import { useStatusStore } from '../../store/statusStore';
+import { useToastStore } from '../../store/toastStore';
 import { api } from '../../lib/api';
 import { truncateHash } from '../../lib/utils';
 import { DiffView } from '../diff/DiffView';
@@ -10,10 +12,13 @@ interface CommitDetailProps {
 }
 
 export function CommitDetail({ repoPath }: CommitDetailProps) {
-  const { commits, selectedCommit, selectCommit } = useLogStore();
+  const { commits, selectedCommit, selectCommit, fetchLog } = useLogStore();
+  const fetchStatus = useStatusStore(s => s.fetchStatus);
+  const addToast = useToastStore(s => s.addToast);
   const commit = commits.find(c => c.hash === selectedCommit);
   const [diff, setDiff] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [uncommitting, setUncommitting] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const collapseRef = useRef<HTMLDivElement>(null);
   const [collapseHeight, setCollapseHeight] = useState<number | null>(null);
@@ -80,6 +85,23 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
     navigator.clipboard.writeText(commit.hash);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const isHead = commits.length > 0 && commits[0].hash === commit.hash;
+
+  const handleUncommit = async () => {
+    setUncommitting(true);
+    try {
+      await api.uncommit(repoPath, commit.hash);
+      addToast('success', 'Commit undone — files moved to unstaged');
+      selectCommit(null);
+      fetchLog(repoPath);
+      fetchStatus(repoPath);
+    } catch (err: any) {
+      addToast('error', err.message || 'Failed to uncommit');
+    } finally {
+      setUncommitting(false);
+    }
   };
 
   const hasBody = commit.body && commit.body.trim();
@@ -151,6 +173,16 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
                 <GitFork size={10} className="text-text-muted" />
                 <span className="font-mono text-text-muted">{commit.parentHashes.map(h => truncateHash(h)).join(', ')}</span>
               </span>
+            )}
+            {isHead && (
+              <button
+                onClick={handleUncommit}
+                disabled={uncommitting}
+                className="inline-flex items-center gap-1 text-[0.65rem] text-warning hover:text-warning/80 disabled:opacity-40 ml-auto"
+              >
+                {uncommitting ? <Loader2 size={10} className="animate-spin" /> : <Undo2 size={10} />}
+                <span>Uncommit</span>
+              </button>
             )}
           </div>
         </div>

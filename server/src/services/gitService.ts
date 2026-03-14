@@ -7,17 +7,41 @@ import { normalizePath } from './pathService';
 
 /**
  * Per-repo mutex to serialize git operations and prevent index.lock conflicts.
- * Multiple concurrent git commands on the same repo can race for the index lock.
+ * Uses a queue-based approach to guarantee strict sequential execution.
  */
-const repoLocks = new Map<string, Promise<void>>();
+const repoQueues = new Map<string, { queue: Array<() => void>; running: boolean }>();
 
 export function withRepoLock<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
   const key = normalizePath(repoPath);
-  const prev = repoLocks.get(key) ?? Promise.resolve();
-  const next = prev.then(fn, fn); // run fn after previous, even if previous failed
-  // Store the chain (void) so the next caller waits for us
-  repoLocks.set(key, next.then(() => {}, () => {}));
-  return next;
+  if (!repoQueues.has(key)) {
+    repoQueues.set(key, { queue: [], running: false });
+  }
+  const state = repoQueues.get(key)!;
+
+  return new Promise<T>((resolve, reject) => {
+    const run = async () => {
+      state.running = true;
+      try {
+        const result = await fn();
+        resolve(result);
+      } catch (err) {
+        reject(err);
+      } finally {
+        const next = state.queue.shift();
+        if (next) {
+          next();
+        } else {
+          state.running = false;
+        }
+      }
+    };
+
+    if (state.running) {
+      state.queue.push(run);
+    } else {
+      run();
+    }
+  });
 }
 
 /**
@@ -369,6 +393,15 @@ export async function commit(repoPath: string, message: string, amend = false): 
   // Extract commit hash from output like "[branch abc1234] message"
   const match = result.match(/\[[\w/.-]+\s+([a-f0-9]+)\]/);
   return match ? match[1] : '';
+}
+
+export async function uncommit(repoPath: string, commitHash: string): Promise<void> {
+  const git = getGit(repoPath);
+  const head = (await git.revparse(['HEAD'])).trim();
+  if (head !== commitHash) {
+    throw new Error('Can only uncommit the most recent commit (HEAD)');
+  }
+  await git.reset(['--mixed', 'HEAD~1']);
 }
 
 export async function discardChanges(repoPath: string, files: string[]): Promise<void> {
