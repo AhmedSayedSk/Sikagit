@@ -376,7 +376,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                 )}
               >
                 <Sparkles size={10} />
-                <span className="text-[0.6rem] font-medium">Smart</span>
+                <span className="text-[0.6rem] font-medium">Smart Commit</span>
               </button>
             )}
           </div>
