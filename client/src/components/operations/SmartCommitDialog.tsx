@@ -178,17 +178,19 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
           >
             Cancel
           </button>
-          <button
-            onClick={handleExecute}
-            disabled={loading || executing || groups.length === 0}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium bg-accent-emphasis hover:bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {executing ? (
-              <><Loader2 size={12} className="animate-spin" /> Committing...</>
-            ) : (
-              <><Sparkles size={12} /> Execute {groups.length} Commit{groups.length !== 1 ? 's' : ''}</>
-            )}
-          </button>
+          {!loading && groups.length > 0 && (
+            <button
+              onClick={handleExecute}
+              disabled={executing}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium bg-accent-emphasis hover:bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {executing ? (
+                <><Loader2 size={12} className="animate-spin" /> Committing...</>
+              ) : (
+                <><Sparkles size={12} /> Execute {groups.length} Commit{groups.length !== 1 ? 's' : ''}</>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>
