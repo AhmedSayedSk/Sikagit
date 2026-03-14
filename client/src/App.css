@@ -66,3 +66,12 @@ body {
   background: var(--color-bg-tertiary);
   border-radius: 4px;
 }
+
+@keyframes toast-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
