@@ -4,6 +4,7 @@ import { useStatusStore } from '../../store/statusStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { api } from '../../lib/api';
 import { DiffView } from './DiffView';
+import { ImagePreview, isImageFile } from './ImagePreview';
 
 interface FileDiffPanelProps {
   repoPath: string;
@@ -124,9 +125,12 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
             Loading diff...
           </div>
+        ) : isImageFile(selectedFile) ? (
+          <ImagePreview repoPath={repoPath} filePath={selectedFile} />
         ) : (
           <DiffView
             diff={diff}
+            repoPath={repoPath}
             onStageHunk={showHunkActions ? handleStageHunk : undefined}
             onDiscardHunk={showHunkActions ? ((hunkIndex: number) => setConfirmDiscardHunk(hunkIndex)) : undefined}
           />

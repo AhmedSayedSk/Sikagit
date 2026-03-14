@@ -72,7 +72,7 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
       {/* Diff takes remaining space */}
       <div className="flex-1 overflow-hidden">
         {diff ? (
-          <DiffView diff={diff} />
+          <DiffView diff={diff} repoPath={repoPath} commit={commit.hash} />
         ) : (
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
             Loading diff...

@@ -482,3 +482,14 @@ export async function gitPush(repoPath: string, setUpstream?: boolean): Promise<
   await git.push('origin');
   return 'Pushed successfully';
 }
+
+export async function getFileContent(repoPath: string, filePath: string, commitHash?: string): Promise<Buffer> {
+  const normalized = normalizePath(repoPath);
+  if (commitHash) {
+    // Get file content from a specific commit
+    const result = execSync(`git show ${commitHash}:${filePath}`, { cwd: normalized, maxBuffer: 10 * 1024 * 1024 });
+    return result;
+  }
+  // Working tree file
+  return readFileSync(join(normalized, filePath));
+}

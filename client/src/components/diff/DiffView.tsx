@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { FileCode, ChevronRight, ChevronDown } from 'lucide-react';
+import { FileCode, ChevronRight, ChevronDown, Image as ImageIcon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { isImageFile } from './ImagePreview';
 
 interface DiffViewProps {
   diff: string;
+  repoPath?: string;
+  commit?: string;
   /** If provided, enables Stage hunk / Discard hunk buttons */
   onStageHunk?: (hunkIndex: number, filePath: string) => void;
   onDiscardHunk?: (hunkIndex: number, filePath: string) => void;
@@ -140,9 +143,11 @@ const markerStyles: Record<DiffLine['type'], string> = {
   meta: '',
 };
 
-function DiffFileSection({ file, hunkStartIndex, onStageHunk, onDiscardHunk }: {
+function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, onDiscardHunk }: {
   file: DiffFile;
   hunkStartIndex: number;
+  repoPath?: string;
+  commit?: string;
   onStageHunk?: (hunkIndex: number, filePath: string) => void;
   onDiscardHunk?: (hunkIndex: number, filePath: string) => void;
 }) {
@@ -171,6 +176,35 @@ function DiffFileSection({ file, hunkStartIndex, onStageHunk, onDiscardHunk }: {
           {removeCount > 0 && <span className="text-danger">-{removeCount}</span>}
         </span>
       </div>
+
+      {/* Image preview for image files */}
+      {expanded && isImageFile(file.path) && repoPath && (
+        <div className="flex items-center gap-6 p-4 justify-center flex-wrap">
+          {commit && (
+            <div className="flex flex-col items-center gap-1.5">
+              <span className="text-[0.6rem] font-medium text-text-muted">Previous</span>
+              <div className="border border-border rounded-lg p-2 bg-bg-primary">
+                <img
+                  src={`/api/v1/git/file?repo=${encodeURIComponent(repoPath)}&file=${encodeURIComponent(file.path)}&commit=${commit}~1`}
+                  alt="Before"
+                  className="max-w-[240px] max-h-[240px] object-contain rounded"
+                  onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col items-center gap-1.5">
+            <span className="text-[0.6rem] font-medium text-text-muted">{commit ? 'Current' : 'Preview'}</span>
+            <div className="border border-border rounded-lg p-2 bg-bg-primary">
+              <img
+                src={`/api/v1/git/file?repo=${encodeURIComponent(repoPath)}&file=${encodeURIComponent(file.path)}${commit ? `&commit=${commit}` : ''}`}
+                alt={file.path}
+                className="max-w-[240px] max-h-[240px] object-contain rounded"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Hunks — only shown when expanded */}
       {expanded && file.hunks.map((hunk, hi) => {
@@ -232,7 +266,7 @@ function DiffFileSection({ file, hunkStartIndex, onStageHunk, onDiscardHunk }: {
   );
 }
 
-export function DiffView({ diff, onStageHunk, onDiscardHunk }: DiffViewProps) {
+export function DiffView({ diff, repoPath, commit, onStageHunk, onDiscardHunk }: DiffViewProps) {
   if (!diff) {
     return (
       <div className="flex items-center justify-center h-full text-text-muted text-sm">
@@ -256,6 +290,8 @@ export function DiffView({ diff, onStageHunk, onDiscardHunk }: DiffViewProps) {
             key={fi}
             file={file}
             hunkStartIndex={fileHunkStart}
+            repoPath={repoPath}
+            commit={commit}
             onStageHunk={onStageHunk}
             onDiscardHunk={onDiscardHunk}
           />

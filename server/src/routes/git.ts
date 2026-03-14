@@ -199,4 +199,23 @@ router.post('/push', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: { message } });
 }));
 
+router.get('/file', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { file, commit } = req.query;
+  if (!file) {
+    res.status(400).json({ success: false, error: 'Missing required parameter: file' });
+    return;
+  }
+  const content = await gitService.getFileContent(repoPath, file as string, commit as string | undefined);
+  const ext = (file as string).split('.').pop()?.toLowerCase() || '';
+  const mimeMap: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    svg: 'image/svg+xml', webp: 'image/webp', ico: 'image/x-icon', bmp: 'image/bmp',
+  };
+  const mime = mimeMap[ext] || 'application/octet-stream';
+  res.set('Content-Type', mime);
+  res.set('Cache-Control', 'no-cache');
+  res.send(content);
+}));
+
 export default router;
