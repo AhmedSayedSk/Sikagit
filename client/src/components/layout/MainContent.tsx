@@ -13,6 +13,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { Tooltip } from '../ui/Tooltip';
 import { cn } from '../../lib/utils';
 import { api } from '../../lib/api';
+import { useToastStore } from '../../store/toastStore';
 
 export function MainContent() {
   const repos = useRepoStore(s => s.repos);
@@ -25,6 +26,7 @@ export function MainContent() {
   const repoProject = activeRepoId ? projects.find(p => p.repoIds.includes(activeRepoId)) : undefined;
 
   const [remoteAction, setRemoteAction] = useState<'fetch' | 'pull' | 'push' | null>(null);
+  const addToast = useToastStore(s => s.addToast);
 
   useEffect(() => {
     if (repo) {
@@ -53,30 +55,39 @@ export function MainContent() {
     try {
       await api.gitFetch(repo.path);
       refreshAfterRemote();
-    } catch { /* status polling will catch up */ }
+      addToast('success', 'Fetched from remote');
+    } catch (err: any) {
+      addToast('error', err.message || 'Fetch failed');
+    }
     setRemoteAction(null);
-  }, [repo, remoteAction, refreshAfterRemote]);
+  }, [repo, remoteAction, refreshAfterRemote, addToast]);
 
   const handlePull = useCallback(async () => {
     if (!repo || remoteAction) return;
     setRemoteAction('pull');
     try {
-      await api.gitPull(repo.path);
+      const result = await api.gitPull(repo.path);
       refreshAfterRemote();
-    } catch { /* */ }
+      addToast('success', result.message || 'Pulled from remote');
+    } catch (err: any) {
+      addToast('error', err.message || 'Pull failed');
+    }
     setRemoteAction(null);
-  }, [repo, remoteAction, refreshAfterRemote]);
+  }, [repo, remoteAction, refreshAfterRemote, addToast]);
 
   const handlePush = useCallback(async () => {
     if (!repo || remoteAction) return;
     setRemoteAction('push');
     try {
       const setUpstream = !status?.tracking;
-      await api.gitPush(repo.path, setUpstream);
+      const result = await api.gitPush(repo.path, setUpstream);
       refreshAfterRemote();
-    } catch { /* */ }
+      addToast('success', result.message || 'Pushed to remote');
+    } catch (err: any) {
+      addToast('error', err.message || 'Push failed');
+    }
     setRemoteAction(null);
-  }, [repo, remoteAction, status?.tracking, refreshAfterRemote]);
+  }, [repo, remoteAction, status?.tracking, refreshAfterRemote, addToast]);
 
   if (!repo) {
     return (
@@ -185,10 +196,10 @@ export function MainContent() {
                 {status.tracking ? (
                   <>
                     {status.ahead > 0 && (
-                      <span className="text-[0.65rem] font-semibold font-mono text-accent">↑{status.ahead}</span>
+                      <span className="text-[0.65rem] font-semibold font-mono text-accent">↑{status.ahead} {status.ahead === 1 ? 'commit' : 'commits'}</span>
                     )}
                     {status.behind > 0 && (
-                      <span className="text-[0.65rem] font-semibold font-mono text-warning">↓{status.behind}</span>
+                      <span className="text-[0.65rem] font-semibold font-mono text-warning">↓{status.behind} {status.behind === 1 ? 'commit' : 'commits'}</span>
                     )}
                     {status.ahead === 0 && status.behind === 0 && (
                       <span className="text-[0.65rem] font-medium text-accent/80 tracking-wide">Synced</span>

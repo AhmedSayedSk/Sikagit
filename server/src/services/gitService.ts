@@ -6,6 +6,21 @@ import type { GitCommit, GitBranch, GitTag, GitFileStatus, GitStatus } from '@si
 import { normalizePath } from './pathService';
 
 /**
+ * Per-repo mutex to serialize git operations and prevent index.lock conflicts.
+ * Multiple concurrent git commands on the same repo can race for the index lock.
+ */
+const repoLocks = new Map<string, Promise<void>>();
+
+export function withRepoLock<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
+  const key = normalizePath(repoPath);
+  const prev = repoLocks.get(key) ?? Promise.resolve();
+  const next = prev.then(fn, fn); // run fn after previous, even if previous failed
+  // Store the chain (void) so the next caller waits for us
+  repoLocks.set(key, next.then(() => {}, () => {}));
+  return next;
+}
+
+/**
  * Read a value from the host's global gitconfig.
  * Inside Docker the host home dirs are mounted at /host/home/<user>/.gitconfig
  */
@@ -437,8 +452,24 @@ export async function gitFetch(repoPath: string): Promise<void> {
 
 export async function gitPull(repoPath: string): Promise<string> {
   const git = getGit(repoPath);
-  const result = await git.pull('origin');
-  return result.summary.changes ? `${result.summary.changes} file(s) changed` : 'Already up to date';
+  const status = await git.status();
+  if (status.tracking) {
+    // Has upstream — simple pull
+    const result = await git.pull();
+    return result.summary.changes ? `${result.summary.changes} file(s) changed` : 'Already up to date';
+  }
+  // No upstream — pull current branch from origin
+  const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+  try {
+    const result = await git.pull('origin', branch);
+    return result.summary.changes ? `${result.summary.changes} file(s) changed` : 'Already up to date';
+  } catch (err: any) {
+    // Branch doesn't exist on remote (e.g. local is "master" but remote has "main")
+    if (err.message?.includes("couldn't find remote ref")) {
+      throw new Error(`Branch "${branch}" does not exist on the remote. Push first to create it, or set an upstream branch.`);
+    }
+    throw err;
+  }
 }
 
 export async function gitPush(repoPath: string, setUpstream?: boolean): Promise<string> {
