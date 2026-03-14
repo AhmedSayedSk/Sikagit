@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Settings, Minus, Plus, Type, Code2, Palette, RotateCcw } from 'lucide-react';
+import { X, Settings, Minus, Plus, Type, Code2, Palette, RotateCcw, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { cn } from '../../lib/utils';
 
@@ -7,12 +7,19 @@ interface AppSettingsDialogProps {
   onClose: () => void;
 }
 
-type Tab = 'general' | 'editor' | 'appearance';
+type Tab = 'general' | 'editor' | 'appearance' | 'ai';
 
 const tabs: { id: Tab; label: string; icon: typeof Type }[] = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'editor', label: 'Diff / Editor', icon: Code2 },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'ai', label: 'AI', icon: Sparkles },
+];
+
+const AI_MODELS = [
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
 ];
 
 function SizeControl({ label, value, onChange, min, max, description }: {
@@ -68,6 +75,9 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     diffLineHeight, setDiffLineHeight,
     theme, setTheme,
     groupFilesByFolder, setGroupFilesByFolder,
+    aiEnabled, setAiEnabled,
+    aiApiKey, setAiApiKey,
+    aiModel, setAiModel,
   } = useUIStore();
 
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -78,13 +88,20 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
   const [draftDiffLineHeight, setDraftDiffLineHeight] = useState(diffLineHeight);
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftGroupFiles, setDraftGroupFiles] = useState(groupFilesByFolder);
+  const [draftAiEnabled, setDraftAiEnabled] = useState(aiEnabled);
+  const [draftAiApiKey, setDraftAiApiKey] = useState(aiApiKey);
+  const [draftAiModel, setDraftAiModel] = useState(aiModel);
+  const [showApiKey, setShowApiKey] = useState(false);
 
   const hasChanges =
     draftFontSize !== fontSize ||
     draftDiffFontSize !== diffFontSize ||
     draftDiffLineHeight !== diffLineHeight ||
     draftTheme !== theme ||
-    draftGroupFiles !== groupFilesByFolder;
+    draftGroupFiles !== groupFilesByFolder ||
+    draftAiEnabled !== aiEnabled ||
+    draftAiApiKey !== aiApiKey ||
+    draftAiModel !== aiModel;
 
   const handleSave = () => {
     setFontSize(draftFontSize);
@@ -92,6 +109,9 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDiffLineHeight(draftDiffLineHeight);
     setTheme(draftTheme);
     setGroupFilesByFolder(draftGroupFiles);
+    setAiEnabled(draftAiEnabled);
+    setAiApiKey(draftAiApiKey);
+    setAiModel(draftAiModel);
     onClose();
   };
 
@@ -101,6 +121,9 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDraftDiffLineHeight(3);
     setDraftTheme('dark');
     setDraftGroupFiles(true);
+    setDraftAiEnabled(false);
+    setDraftAiApiKey('');
+    setDraftAiModel('gemini-2.5-pro');
   };
 
   return (
@@ -302,6 +325,92 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
                   </button>
                 </div>
                 <p className="text-[0.6rem] text-text-muted">Light theme coming soon</p>
+              </div>
+            )}
+
+            {activeTab === 'ai' && (
+              <div className="space-y-5">
+                <div>
+                  <h3 className="text-xs font-medium text-text-primary mb-1">AI Assistant</h3>
+                  <p className="text-[0.6rem] text-text-muted mb-3">Use Google Gemini to generate commit messages and smart-split changes</p>
+                </div>
+
+                {/* Enable/Disable toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-medium text-text-primary mb-0.5">Enable AI</h3>
+                    <p className="text-[0.6rem] text-text-muted">Show AI features in the commit workflow</p>
+                  </div>
+                  <div
+                    onClick={() => setDraftAiEnabled(!draftAiEnabled)}
+                    style={{
+                      width: 32, height: 18, borderRadius: 9,
+                      backgroundColor: draftAiEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                      border: `1px solid ${draftAiEnabled ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                      cursor: 'pointer', flexShrink: 0, position: 'relative',
+                      transition: 'background-color 0.2s, border-color 0.2s',
+                    }}
+                  >
+                    <div style={{
+                      width: 12, height: 12, borderRadius: '50%', backgroundColor: '#fff',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.2)', position: 'absolute', top: 2,
+                      left: draftAiEnabled ? 17 : 2, transition: 'left 0.2s',
+                    }} />
+                  </div>
+                </div>
+
+                {/* API Key */}
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1.5 font-medium">Google AI API Key</label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={draftAiApiKey}
+                      onChange={e => setDraftAiApiKey(e.target.value)}
+                      placeholder="Enter your Gemini API key"
+                      className="w-full bg-bg-primary border border-border rounded px-3 py-2 pr-9 text-sm text-text-primary font-mono text-xs focus:outline-none focus:border-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                    >
+                      {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                  <p className="text-[0.6rem] text-text-muted mt-1">
+                    Get your key from <span className="text-accent">aistudio.google.com</span>. Stored locally in your browser.
+                  </p>
+                </div>
+
+                {/* Model selection */}
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1.5 font-medium">Model</label>
+                  <select
+                    value={draftAiModel}
+                    onChange={e => setDraftAiModel(e.target.value)}
+                    className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
+                  >
+                    {AI_MODELS.map(m => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Info */}
+                <div className="border border-border rounded-lg p-3 bg-bg-primary">
+                  <p className="text-[0.6rem] text-text-muted mb-2 font-medium uppercase tracking-wider">Features</p>
+                  <ul className="text-[0.65rem] text-text-secondary space-y-1.5">
+                    <li className="flex items-start gap-2">
+                      <Sparkles size={11} className="text-accent mt-0.5 flex-shrink-0" />
+                      <span><strong>AI Suggest</strong> — Auto-generate commit title and description from your staged changes</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Sparkles size={11} className="text-accent mt-0.5 flex-shrink-0" />
+                      <span><strong>Smart Commit</strong> — AI groups related changes into separate logical commits</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
             )}
           </div>

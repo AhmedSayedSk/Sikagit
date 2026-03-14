@@ -127,6 +127,23 @@ export const api = {
     body: JSON.stringify({ repo, setUpstream }),
   }),
 
+  // AI
+  aiSuggest: (repo: string, apiKey: string, model: string) =>
+    request<{ title: string; description: string }>('/ai/suggest', {
+      method: 'POST',
+      body: JSON.stringify({ repo, apiKey, model }),
+    }),
+  aiSmartCommitPreview: (repo: string, apiKey: string, model: string) =>
+    request<{ groups: { files: string[]; title: string; description: string }[] }>('/ai/smart-commit/preview', {
+      method: 'POST',
+      body: JSON.stringify({ repo, apiKey, model }),
+    }),
+  aiSmartCommitExecute: (repo: string, groups: { files: string[]; title: string; description: string }[]) =>
+    request<{ commits: { hash: string; message: string }[] }>('/ai/smart-commit/execute', {
+      method: 'POST',
+      body: JSON.stringify({ repo, groups }),
+    }),
+
   // Browse — resolve a folder name + file fingerprint to an absolute server path
   resolveFolder: (folderName: string, files: string[]) =>
     request<{ path: string; allMatches: string[] }>('/browse/resolve', {

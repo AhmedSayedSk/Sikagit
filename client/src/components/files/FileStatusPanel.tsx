@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitCommitHorizontal, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitCommitHorizontal, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning, Sparkles } from 'lucide-react';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useUIStore } from '../../store/uiStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CommitDialog } from '../operations/CommitDialog';
+import { SmartCommitDialog } from '../operations/SmartCommitDialog';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import type { GitFileStatus } from '@sikagit/shared';
@@ -119,6 +120,8 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const [confirmDiscard, setConfirmDiscard] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
+  const [smartCommitOpen, setSmartCommitOpen] = useState(false);
+  const { aiEnabled, aiApiKey } = useUIStore();
   const [collapsedUnstagedFolders, setCollapsedUnstagedFolders] = useState<Set<string>>(new Set());
   const [collapsedStagedFolders, setCollapsedStagedFolders] = useState<Set<string>>(new Set());
 
@@ -361,6 +364,21 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
               <GitCommitHorizontal size={10} />
               <span className="text-[0.6rem] font-medium">Commit</span>
             </button>
+            {aiEnabled && !!aiApiKey && (
+              <button
+                onClick={() => setSmartCommitOpen(true)}
+                disabled={stagedFiles.length === 0}
+                className={cn(
+                  'px-1.5 py-0.5 rounded border flex items-center gap-1 transition-colors',
+                  stagedFiles.length > 0
+                    ? 'border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 hover:border-accent/60 cursor-pointer'
+                    : 'border-border bg-bg-tertiary text-text-muted/40 cursor-not-allowed'
+                )}
+              >
+                <Sparkles size={10} />
+                <span className="text-[0.6rem] font-medium">Smart</span>
+              </button>
+            )}
           </div>
         </div>
         {stagedOpen && (
@@ -422,6 +440,12 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
           repoPath={repoPath}
           stagedCount={stagedFiles.length}
           onClose={() => setCommitDialogOpen(false)}
+        />
+      )}
+      {smartCommitOpen && (
+        <SmartCommitDialog
+          repoPath={repoPath}
+          onClose={() => setSmartCommitOpen(false)}
         />
       )}
     </div>

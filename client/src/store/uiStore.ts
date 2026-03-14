@@ -20,6 +20,9 @@ interface UIState {
   colHashWidth: number;
   unstagedPanelRatio: number; // 0-1, proportion of unstaged panel width
   groupFilesByFolder: boolean;
+  aiEnabled: boolean;
+  aiApiKey: string;
+  aiModel: string;
   toggleSidebar: () => void;
   setActivePanel: (panel: Panel) => void;
   setTheme: (theme: Theme) => void;
@@ -35,6 +38,9 @@ interface UIState {
   setColHashWidth: (width: number) => void;
   setUnstagedPanelRatio: (ratio: number) => void;
   setGroupFilesByFolder: (v: boolean) => void;
+  setAiEnabled: (v: boolean) => void;
+  setAiApiKey: (key: string) => void;
+  setAiModel: (model: string) => void;
 }
 
 const SIDEBAR_MIN = 180;
@@ -66,6 +72,9 @@ export const useUIStore = create<UIState>()(
       colHashWidth: 64,
       unstagedPanelRatio: 0.5,
       groupFilesByFolder: true,
+      aiEnabled: false,
+      aiApiKey: '',
+      aiModel: 'gemini-2.5-pro',
 
       toggleSidebar: () => set(state => ({ sidebarOpen: !state.sidebarOpen })),
       setActivePanel: (panel: Panel) => set({ activePanel: panel }),
@@ -98,6 +107,9 @@ export const useUIStore = create<UIState>()(
         unstagedPanelRatio: clamp(ratio, 0.15, 0.85),
       }),
       setGroupFilesByFolder: (v: boolean) => set({ groupFilesByFolder: v }),
+      setAiEnabled: (v: boolean) => set({ aiEnabled: v }),
+      setAiApiKey: (key: string) => set({ aiApiKey: key }),
+      setAiModel: (model: string) => set({ aiModel: model }),
     }),
     { name: 'sikagit-ui' }
   )
