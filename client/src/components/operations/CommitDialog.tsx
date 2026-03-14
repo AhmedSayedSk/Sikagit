@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { X, GitCommitHorizontal } from 'lucide-react';
+import { X, GitCommitHorizontal, Sparkles, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
+import { useUIStore } from '../../store/uiStore';
 import { cn } from '../../lib/utils';
 
 interface CommitDialogProps {
@@ -14,9 +15,13 @@ interface CommitDialogProps {
 export function CommitDialog({ repoPath, stagedCount, onClose }: CommitDialogProps) {
   const [message, setMessage] = useState('');
   const [committing, setCommitting] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState('');
   const fetchStatus = useStatusStore(s => s.fetchStatus);
   const fetchLog = useLogStore(s => s.fetchLog);
+  const { aiEnabled, aiApiKey, aiModel } = useUIStore();
+
+  const aiReady = aiEnabled && !!aiApiKey;
 
   const handleCommit = async () => {
     if (!message.trim() || stagedCount === 0) return;
@@ -31,6 +36,23 @@ export function CommitDialog({ repoPath, stagedCount, onClose }: CommitDialogPro
       setError(err.message || 'Commit failed');
     } finally {
       setCommitting(false);
+    }
+  };
+
+  const handleAiSuggest = async () => {
+    if (!aiReady) return;
+    setSuggesting(true);
+    setError('');
+    try {
+      const result = await api.aiSuggest(repoPath, aiApiKey, aiModel);
+      const msg = result.description
+        ? `${result.title}\n\n${result.description}`
+        : result.title;
+      setMessage(msg);
+    } catch (err: any) {
+      setError(err.message || 'AI suggestion failed');
+    } finally {
+      setSuggesting(false);
     }
   };
 
@@ -58,7 +80,23 @@ export function CommitDialog({ repoPath, stagedCount, onClose }: CommitDialogPro
         {/* Content */}
         <div className="p-4 space-y-3">
           <div>
-            <label className="block text-xs text-text-secondary mb-1.5 font-medium">Commit Message</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-text-secondary font-medium">Commit Message</label>
+              {aiReady && (
+                <button
+                  onClick={handleAiSuggest}
+                  disabled={suggesting || committing}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[0.65rem] font-medium text-accent hover:bg-accent/10 border border-accent/20 hover:border-accent/40 transition-colors disabled:opacity-40"
+                >
+                  {suggesting ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={11} />
+                  )}
+                  {suggesting ? 'Generating...' : 'AI Suggest'}
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={message.split('\n')[0] || ''}
