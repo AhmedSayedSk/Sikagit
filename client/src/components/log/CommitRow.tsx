@@ -26,14 +26,22 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
       {/* Description */}
       <span className="flex-1 truncate ml-2">
         {commit.branches.length > 0 && (
-          commit.branches.map(b => (
-            <span
-              key={b}
-              className="inline-flex items-center px-1.5 py-0 rounded text-[0.625rem] font-medium bg-accent/10 text-accent border border-accent/20 mr-1"
-            >
-              {b}
-            </span>
-          ))
+          commit.branches.map(b => {
+            const isRemote = b.includes('/');
+            return (
+              <span
+                key={b}
+                className={cn(
+                  'inline-flex items-center px-1.5 py-0 rounded text-[0.625rem] font-medium mr-1',
+                  isRemote
+                    ? 'bg-danger/10 text-danger border border-danger/20'
+                    : 'bg-success/10 text-success border border-success/20'
+                )}
+              >
+                {b}
+              </span>
+            );
+          })
         )}
         {commit.tags.length > 0 && (
           commit.tags.map(t => (
