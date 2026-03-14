@@ -90,7 +90,7 @@ export function MainContent() {
     );
   }
 
-  const hasRemote = status?.tracking;
+  const hasRemote = status?.tracking || status?.remoteUrl;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -113,43 +113,46 @@ export function MainContent() {
         {/* Remote actions */}
         {status && hasRemote && (
           <div className="flex items-center gap-1">
-            <Tooltip content="Fetch from remote" position="bottom">
-              <button
-                onClick={handleFetch}
-                disabled={!!remoteAction}
-                className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors disabled:opacity-40"
-              >
-                {remoteAction === 'fetch' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              </button>
-            </Tooltip>
-            <Tooltip content="Pull from remote" position="bottom">
-              <button
-                onClick={handlePull}
-                disabled={!!remoteAction}
-                className={cn(
-                  'p-1.5 rounded-md transition-colors disabled:opacity-40',
-                  status.behind > 0
-                    ? 'text-warning hover:bg-warning/15'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-                )}
-              >
-                {remoteAction === 'pull' ? <Loader2 size={13} className="animate-spin" /> : <ArrowDown size={13} />}
-              </button>
-            </Tooltip>
-            <Tooltip content={status.tracking ? 'Push to remote' : 'Push & set upstream'} position="bottom">
-              <button
-                onClick={handlePush}
-                disabled={!!remoteAction}
-                className={cn(
-                  'p-1.5 rounded-md transition-colors disabled:opacity-40',
-                  status.ahead > 0
-                    ? 'text-accent hover:bg-accent/15'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-                )}
-              >
-                {remoteAction === 'push' ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={13} />}
-              </button>
-            </Tooltip>
+            <button
+              onClick={handleFetch}
+              disabled={!!remoteAction}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors disabled:opacity-40 text-[0.7rem]"
+            >
+              {remoteAction === 'fetch' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              <span>Fetch</span>
+            </button>
+            <button
+              onClick={handlePull}
+              disabled={!!remoteAction}
+              className={cn(
+                'flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors disabled:opacity-40 text-[0.7rem]',
+                status.behind > 0
+                  ? 'text-warning hover:bg-warning/15'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+              )}
+            >
+              {remoteAction === 'pull' ? <Loader2 size={12} className="animate-spin" /> : <ArrowDown size={12} />}
+              <span>Pull</span>
+              {status.behind > 0 && (
+                <span className="ml-0.5 px-1.5 py-px rounded-full bg-warning/15 text-warning text-[0.6rem] font-semibold font-mono leading-none">{status.behind}</span>
+              )}
+            </button>
+            <button
+              onClick={handlePush}
+              disabled={!!remoteAction}
+              className={cn(
+                'flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors disabled:opacity-40 text-[0.7rem]',
+                status.ahead > 0
+                  ? 'text-accent hover:bg-accent/15'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+              )}
+            >
+              {remoteAction === 'push' ? <Loader2 size={12} className="animate-spin" /> : <ArrowUp size={12} />}
+              <span>{status.tracking ? 'Push' : 'Push'}</span>
+              {status.ahead > 0 && (
+                <span className="ml-0.5 px-1.5 py-px rounded-full bg-accent/15 text-accent text-[0.6rem] font-semibold font-mono leading-none">{status.ahead}</span>
+              )}
+            </button>
           </div>
         )}
 
@@ -159,28 +162,40 @@ export function MainContent() {
             <Tooltip content={
               <>
                 <span className="font-semibold text-accent">Remote: </span>
-                <span className="text-text-primary">{status.tracking}</span>
-                {status.ahead > 0 && (
-                  <div className="mt-1 text-success">{status.ahead} commit{status.ahead > 1 ? 's' : ''} ahead — ready to push</div>
-                )}
-                {status.behind > 0 && (
-                  <div className="mt-1 text-warning">{status.behind} commit{status.behind > 1 ? 's' : ''} behind — pull to update</div>
-                )}
-                {status.ahead === 0 && status.behind === 0 && (
-                  <div className="mt-1 text-text-secondary">Up to date with remote</div>
+                <span className="text-text-primary">{status.tracking || status.remoteUrl}</span>
+                {status.tracking ? (
+                  <>
+                    {status.ahead > 0 && (
+                      <div className="mt-1 text-success">{status.ahead} commit{status.ahead > 1 ? 's' : ''} ahead — ready to push</div>
+                    )}
+                    {status.behind > 0 && (
+                      <div className="mt-1 text-warning">{status.behind} commit{status.behind > 1 ? 's' : ''} behind — pull to update</div>
+                    )}
+                    {status.ahead === 0 && status.behind === 0 && (
+                      <div className="mt-1 text-text-secondary">Up to date with remote</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="mt-1 text-text-muted">No upstream set — push to set upstream</div>
                 )}
               </>
             }>
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent/10 border border-accent/20 cursor-default">
                 <Cloud size={12} className="text-accent" />
-                {status.ahead > 0 && (
-                  <span className="text-[0.65rem] font-semibold font-mono text-accent">↑{status.ahead}</span>
-                )}
-                {status.behind > 0 && (
-                  <span className="text-[0.65rem] font-semibold font-mono text-warning">↓{status.behind}</span>
-                )}
-                {status.ahead === 0 && status.behind === 0 && (
-                  <span className="text-[0.65rem] font-medium text-accent/80 tracking-wide">Synced</span>
+                {status.tracking ? (
+                  <>
+                    {status.ahead > 0 && (
+                      <span className="text-[0.65rem] font-semibold font-mono text-accent">↑{status.ahead}</span>
+                    )}
+                    {status.behind > 0 && (
+                      <span className="text-[0.65rem] font-semibold font-mono text-warning">↓{status.behind}</span>
+                    )}
+                    {status.ahead === 0 && status.behind === 0 && (
+                      <span className="text-[0.65rem] font-medium text-accent/80 tracking-wide">Synced</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-[0.65rem] font-medium text-accent/80 tracking-wide">Remote</span>
                 )}
               </div>
             </Tooltip>

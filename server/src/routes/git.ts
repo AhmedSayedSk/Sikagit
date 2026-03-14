@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { validateRepoPath } from '../middleware/validatePath';
 import * as gitService from '../services/gitService';
+import { withRepoLock } from '../services/gitService';
 import { computeGraph } from '../services/graphService';
 
 const router = Router();
@@ -16,7 +17,7 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
 
 router.get('/status', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const status = await gitService.getStatus(repoPath);
+  const status = await withRepoLock(repoPath, () => gitService.getStatus(repoPath));
   res.json({ success: true, data: status });
 }));
 
@@ -24,7 +25,7 @@ router.get('/log', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const limit = parseInt(req.query.limit as string) || 200;
   const skip = parseInt(req.query.skip as string) || 0;
-  const commits = await gitService.getLogWithParents(repoPath, limit, skip);
+  const commits = await withRepoLock(repoPath, () => gitService.getLogWithParents(repoPath, limit, skip));
   res.json({ success: true, data: commits });
 }));
 
@@ -32,34 +33,34 @@ router.get('/graph', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const limit = parseInt(req.query.limit as string) || 200;
   const skip = parseInt(req.query.skip as string) || 0;
-  const commits = await gitService.getLogWithParents(repoPath, limit, skip);
+  const commits = await withRepoLock(repoPath, () => gitService.getLogWithParents(repoPath, limit, skip));
   const graph = computeGraph(commits);
   res.json({ success: true, data: graph });
 }));
 
 router.get('/branches', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const branches = await gitService.getBranches(repoPath);
+  const branches = await withRepoLock(repoPath, () => gitService.getBranches(repoPath));
   res.json({ success: true, data: branches });
 }));
 
 router.get('/tags', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const tags = await gitService.getTags(repoPath);
+  const tags = await withRepoLock(repoPath, () => gitService.getTags(repoPath));
   res.json({ success: true, data: tags });
 }));
 
 router.get('/diff', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const { commit, file } = req.query;
-  const diff = await gitService.getDiff(repoPath, commit as string, file as string);
+  const diff = await withRepoLock(repoPath, () => gitService.getDiff(repoPath, commit as string, file as string));
   res.json({ success: true, data: diff });
 }));
 
 router.get('/diff/staged', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const { file } = req.query;
-  const diff = await gitService.getStagedDiff(repoPath, file as string);
+  const diff = await withRepoLock(repoPath, () => gitService.getStagedDiff(repoPath, file as string));
   res.json({ success: true, data: diff });
 }));
 
@@ -70,7 +71,7 @@ router.post('/stage-hunk', asyncHandler(async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'Missing required field: patch' });
     return;
   }
-  await gitService.stageHunk(repoPath, patch);
+  await withRepoLock(repoPath, () => gitService.stageHunk(repoPath, patch));
   res.json({ success: true });
 }));
 
@@ -81,7 +82,7 @@ router.post('/discard-hunk', asyncHandler(async (req: Request, res: Response) =>
     res.status(400).json({ success: false, error: 'Missing required field: patch' });
     return;
   }
-  await gitService.discardHunk(repoPath, patch);
+  await withRepoLock(repoPath, () => gitService.discardHunk(repoPath, patch));
   res.json({ success: true });
 }));
 
@@ -92,7 +93,7 @@ router.post('/stage', asyncHandler(async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'Missing required field: files (array)' });
     return;
   }
-  await gitService.stageFiles(repoPath, files);
+  await withRepoLock(repoPath, () => gitService.stageFiles(repoPath, files));
   res.json({ success: true });
 }));
 
@@ -103,7 +104,7 @@ router.post('/unstage', asyncHandler(async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'Missing required field: files (array)' });
     return;
   }
-  await gitService.unstageFiles(repoPath, files);
+  await withRepoLock(repoPath, () => gitService.unstageFiles(repoPath, files));
   res.json({ success: true });
 }));
 
@@ -114,7 +115,7 @@ router.post('/commit', asyncHandler(async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'Missing required field: message' });
     return;
   }
-  const commitHash = await gitService.commit(repoPath, message, amend);
+  const commitHash = await withRepoLock(repoPath, () => gitService.commit(repoPath, message, amend));
   res.json({ success: true, data: { hash: commitHash } });
 }));
 
@@ -125,7 +126,7 @@ router.post('/discard', asyncHandler(async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'Missing required field: files (array)' });
     return;
   }
-  await gitService.discardChanges(repoPath, files);
+  await withRepoLock(repoPath, () => gitService.discardChanges(repoPath, files));
   res.json({ success: true });
 }));
 
@@ -174,26 +175,27 @@ router.post('/remote-url', asyncHandler(async (req: Request, res: Response) => {
 
 router.post('/test-remote', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const result = await gitService.testRemoteConnection(repoPath);
+  const { url } = req.body;
+  const result = await gitService.testRemoteConnection(repoPath, url);
   res.json({ success: true, data: result });
 }));
 
 router.post('/fetch', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  await gitService.gitFetch(repoPath);
+  await withRepoLock(repoPath, () => gitService.gitFetch(repoPath));
   res.json({ success: true });
 }));
 
 router.post('/pull', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const message = await gitService.gitPull(repoPath);
+  const message = await withRepoLock(repoPath, () => gitService.gitPull(repoPath));
   res.json({ success: true, data: { message } });
 }));
 
 router.post('/push', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const { setUpstream } = req.body;
-  const message = await gitService.gitPush(repoPath, setUpstream);
+  const message = await withRepoLock(repoPath, () => gitService.gitPush(repoPath, setUpstream));
   res.json({ success: true, data: { message } });
 }));
 
