@@ -13,11 +13,16 @@ services:
       # Mount host filesystem so git repos are accessible
       - /home:/host/home
       - /mnt:/host/mnt
+      # Mount SSH keys for git remote operations
+      - ~/.ssh:/root/.ssh:ro
+      # Mount gh CLI config for HTTPS credential helper
+      - ~/.config/gh:/root/.config/gh:ro
     environment:
       - PORT=3001
       - NODE_ENV=development
       - CORS_ORIGINS=http://localhost:3200,http://127.0.0.1:3200
       - DATA_DIR=/app/server/data
+      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no
     restart: unless-stopped
 
   client:

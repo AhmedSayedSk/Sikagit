@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, FolderGit2, Settings, SlidersHorizontal, FolderKanban, ChevronDown, ChevronRight, Pencil, GitBranch } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, FolderGit2, Settings, SlidersHorizontal, FolderKanban, ChevronRight, Pencil, GitBranch } from 'lucide-react';
 import { getRepoIcon } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -53,10 +53,49 @@ function RepoItem({ repo, isActive, onSelect, onSettings, onRemove }: {
   );
 }
 
-function ProjectSection({ project, repos, activeRepoId, onSelectRepo, onSettingsRepo, onRemoveRepo, onEditProject, onDeleteProject }: {
+function CollapsiblePanel({ expanded, children }: { expanded: boolean; children: React.ReactNode }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | undefined>(expanded ? undefined : 0);
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      setHeight(expanded ? undefined : 0);
+      return;
+    }
+    const el = contentRef.current;
+    if (!el) return;
+    if (expanded) {
+      const scrollH = el.scrollHeight;
+      setHeight(0);
+      requestAnimationFrame(() => {
+        setHeight(scrollH);
+        const onEnd = () => { setHeight(undefined); el.removeEventListener('transitionend', onEnd); };
+        el.addEventListener('transitionend', onEnd);
+      });
+    } else {
+      setHeight(el.scrollHeight);
+      requestAnimationFrame(() => setHeight(0));
+    }
+  }, [expanded]);
+
+  return (
+    <div
+      ref={contentRef}
+      style={{ height: height !== undefined ? height : 'auto', overflow: 'hidden', transition: 'height 200ms ease' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ProjectSection({ project, repos, activeRepoId, expanded, onToggle, onSelectRepo, onSettingsRepo, onRemoveRepo, onEditProject, onDeleteProject }: {
   project: Project;
   repos: RepoBookmark[];
   activeRepoId: string | null;
+  expanded: boolean;
+  onToggle: () => void;
   onSelectRepo: (id: string) => void;
   onSettingsRepo: (repo: RepoBookmark) => void;
   onRemoveRepo: (id: string) => void;
@@ -64,24 +103,28 @@ function ProjectSection({ project, repos, activeRepoId, onSelectRepo, onSettings
   onDeleteProject: () => void;
 }) {
   const projectRepos = repos.filter(r => project.repoIds.includes(r.id));
-  const hasActiveRepo = activeRepoId !== null && project.repoIds.includes(activeRepoId);
-  const [expanded, setExpanded] = useState(hasActiveRepo);
 
   return (
-    <div className="mb-0.5">
+    <div className={cn(
+      'mb-0.5 mx-1 rounded-md transition-all duration-200',
+      expanded ? 'bg-accent/[0.06] border border-accent/10' : 'border border-transparent'
+    )}>
       {/* Project header */}
       <div
-        className="group flex items-center gap-1.5 px-2 py-2 cursor-pointer hover:bg-bg-tertiary/30 transition-colors"
-        onClick={() => setExpanded(!expanded)}
+        className="group flex items-center gap-1.5 px-2 py-2 cursor-pointer hover:bg-bg-tertiary/30 transition-colors rounded-md"
+        onClick={onToggle}
       >
-        {expanded ? <ChevronDown size={11} className="text-text-muted" /> : <ChevronRight size={11} className="text-text-muted" />}
+        <ChevronRight
+          size={11}
+          className="text-text-muted transition-transform duration-200"
+          style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+        />
         {project.avatar ? (
           <img src={project.avatar} alt="" className="h-4 max-w-[32px] rounded-sm flex-shrink-0 object-contain" />
         ) : (
           <FolderKanban size={12} className="flex-shrink-0 text-accent" />
         )}
         <span className="flex-1 truncate font-medium text-text-primary">{project.name}</span>
-        <span className="text-[0.75em] text-text-muted mr-1">{projectRepos.length}</span>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
           <button
             onClick={e => { e.stopPropagation(); onEditProject(); }}
@@ -100,25 +143,39 @@ function ProjectSection({ project, repos, activeRepoId, onSelectRepo, onSettings
         </div>
       </div>
 
-      {/* Project repos */}
-      {expanded && (
-        <div className="ml-3 mt-1 mb-2">
+      {/* Project repos — animated collapse */}
+      <CollapsiblePanel expanded={expanded}>
+        <div className="relative ml-3 mt-1 mb-2">
+          {/* Tree vertical line */}
+          {projectRepos.length > 0 && (
+            <div
+              className="absolute left-[10px] top-0 w-px bg-accent/30"
+              style={{ bottom: 14 }}
+            />
+          )}
           {projectRepos.length === 0 ? (
             <p className="text-[0.75em] text-text-muted px-3 py-1 text-center">No repositories</p>
           ) : (
-            projectRepos.map(repo => (
-              <RepoItem
-                key={repo.id}
-                repo={repo}
-                isActive={activeRepoId === repo.id}
-                onSelect={() => onSelectRepo(repo.id)}
-                onSettings={() => onSettingsRepo(repo)}
-                onRemove={() => onRemoveRepo(repo.id)}
-              />
+            projectRepos.map((repo, i) => (
+              <div key={repo.id} className="relative">
+                {/* Tree horizontal branch */}
+                <div
+                  className="absolute left-[10px] top-1/2 w-2 h-px bg-accent/30"
+                />
+                <div className="ml-4">
+                  <RepoItem
+                    repo={repo}
+                    isActive={activeRepoId === repo.id}
+                    onSelect={() => onSelectRepo(repo.id)}
+                    onSettings={() => onSettingsRepo(repo)}
+                    onRemove={() => onRemoveRepo(repo.id)}
+                  />
+                </div>
+              </div>
             ))
           )}
         </div>
-      )}
+      </CollapsiblePanel>
     </div>
   );
 }
@@ -133,6 +190,13 @@ export function Sidebar() {
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project }>({ open: false });
   const [confirmRemoveRepo, setConfirmRemoveRepo] = useState<{ id: string; name: string } | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<{ id: string; name: string } | null>(null);
+
+  // Accordion: only one project expanded at a time; auto-expand project containing active repo
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(() => {
+    if (!activeRepoId) return null;
+    const p = projects.find(p => p.repoIds.includes(activeRepoId));
+    return p?.id ?? null;
+  });
 
   useEffect(() => {
     fetchProjects();
@@ -186,7 +250,9 @@ export function Sidebar() {
                 project={project}
                 repos={repos}
                 activeRepoId={activeRepoId}
-                onSelectRepo={setActiveRepo}
+                expanded={expandedProjectId === project.id}
+                onToggle={() => setExpandedProjectId(expandedProjectId === project.id ? null : project.id)}
+                onSelectRepo={(id) => { setActiveRepo(id); setExpandedProjectId(project.id); }}
                 onSettingsRepo={setSettingsRepo}
                 onRemoveRepo={(id) => { const r = repos.find(r => r.id === id); setConfirmRemoveRepo({ id, name: r?.name || 'this repository' }); }}
                 onEditProject={() => setProjectDialog({ open: true, project })}

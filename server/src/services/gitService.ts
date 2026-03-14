@@ -390,3 +390,52 @@ export async function unsetConfig(repoPath: string, key: string): Promise<void> 
   const git = getGit(repoPath);
   try { await git.raw(['config', '--local', '--unset', key]); } catch { /* already unset */ }
 }
+
+export async function setRemoteUrl(repoPath: string, url: string): Promise<void> {
+  const git = getGit(repoPath);
+  if (!url.trim()) {
+    // Remove remote if URL is empty
+    try { await git.raw(['remote', 'remove', 'origin']); } catch { /* no remote to remove */ }
+    return;
+  }
+  try {
+    // Try set-url first (works if remote already exists)
+    await git.raw(['remote', 'set-url', 'origin', url.trim()]);
+  } catch {
+    // Remote doesn't exist, add it
+    await git.raw(['remote', 'add', 'origin', url.trim()]);
+  }
+}
+
+export async function testRemoteConnection(repoPath: string): Promise<{ ok: boolean; error?: string }> {
+  const normalized = normalizePath(repoPath);
+  try {
+    execSync('git ls-remote --exit-code origin HEAD', { cwd: normalized, encoding: 'utf-8', timeout: 15000, stdio: 'pipe' });
+    return { ok: true };
+  } catch (err: any) {
+    const msg = err.stderr?.trim() || err.message || 'Connection failed';
+    return { ok: false, error: msg };
+  }
+}
+
+export async function gitFetch(repoPath: string): Promise<void> {
+  const git = getGit(repoPath);
+  await git.fetch('origin');
+}
+
+export async function gitPull(repoPath: string): Promise<string> {
+  const git = getGit(repoPath);
+  const result = await git.pull('origin');
+  return result.summary.changes ? `${result.summary.changes} file(s) changed` : 'Already up to date';
+}
+
+export async function gitPush(repoPath: string, setUpstream?: boolean): Promise<string> {
+  const git = getGit(repoPath);
+  if (setUpstream) {
+    const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+    await git.push(['--set-upstream', 'origin', branch]);
+    return `Pushed and set upstream for ${branch}`;
+  }
+  await git.push('origin');
+  return 'Pushed successfully';
+}

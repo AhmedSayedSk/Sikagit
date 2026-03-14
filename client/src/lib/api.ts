@@ -106,6 +106,26 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo, key, value }),
   }),
+  setRemoteUrl: (repo: string, url: string) => request<void>('/git/remote-url', {
+    method: 'POST',
+    body: JSON.stringify({ repo, url }),
+  }),
+  testRemote: (repo: string) => request<{ ok: boolean; error?: string }>('/git/test-remote', {
+    method: 'POST',
+    body: JSON.stringify({ repo }),
+  }),
+  gitFetch: (repo: string) => request<void>('/git/fetch', {
+    method: 'POST',
+    body: JSON.stringify({ repo }),
+  }),
+  gitPull: (repo: string) => request<{ message: string }>('/git/pull', {
+    method: 'POST',
+    body: JSON.stringify({ repo }),
+  }),
+  gitPush: (repo: string, setUpstream?: boolean) => request<{ message: string }>('/git/push', {
+    method: 'POST',
+    body: JSON.stringify({ repo, setUpstream }),
+  }),
 
   // Browse — resolve a folder name + file fingerprint to an absolute server path
   resolveFolder: (folderName: string, files: string[]) =>

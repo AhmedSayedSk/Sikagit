@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, Loader2 } from 'lucide-react';
+import { X, Settings, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import type { RepoBookmark } from '@sikagit/shared';
 import { useRepoStore } from '../../store/repoStore';
+import { useStatusStore } from '../../store/statusStore';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { REPO_ICONS, getRepoIcon } from '../../lib/repoIcons';
@@ -13,6 +14,7 @@ interface RepoSettingsDialogProps {
 
 export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const updateRepo = useRepoStore(s => s.updateRepo);
+  const fetchAll = useStatusStore(s => s.fetchAll);
 
   // Repo bookmark fields
   const [name, setName] = useState(repo.name);
@@ -23,9 +25,11 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const [userEmail, setUserEmail] = useState('');
   const [remoteUrl, setRemoteUrl] = useState('');
 
+  const [originalRemoteUrl, setOriginalRemoteUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
 
   useEffect(() => {
     api.getGitConfig(repo.path)
@@ -33,6 +37,7 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
         setUserName(config.userName || '');
         setUserEmail(config.userEmail || '');
         setRemoteUrl(config.remoteUrl || '');
+        setOriginalRemoteUrl(config.remoteUrl || '');
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -41,6 +46,7 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const handleSave = async () => {
     setSaving(true);
     setError('');
+    setWarning('');
     try {
       await updateRepo(repo.id, {
         name: name.trim() || repo.name,
@@ -55,6 +61,26 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
         await api.setGitConfig(repo.path, key, value);
       }
 
+      // Update remote URL if changed
+      if (remoteUrl.trim() !== originalRemoteUrl) {
+        await api.setRemoteUrl(repo.path, remoteUrl.trim());
+
+        // Test connection if a URL was set
+        if (remoteUrl.trim()) {
+          const result = await api.testRemote(repo.path);
+          if (!result.ok) {
+            // Save succeeds but warn user about connection
+            setWarning('Remote URL saved but connection test failed. Please check the URL and try again.');
+            setOriginalRemoteUrl(remoteUrl.trim());
+            setSaving(false);
+            fetchAll(repo.path);
+            return;
+          }
+        }
+      }
+
+      // Refresh status so toolbar updates
+      fetchAll(repo.path);
       onClose();
     } catch (err: any) {
       setError(err.message);
@@ -156,15 +182,17 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
                 />
               </div>
 
-              {/* Remote URL (read-only info) */}
+              {/* Remote URL */}
               <div>
                 <label className="block text-xs text-text-secondary mb-1.5 font-medium">Remote URL (origin)</label>
                 <input
                   type="text"
                   value={remoteUrl}
-                  readOnly
-                  className="w-full bg-bg-tertiary/50 border border-border rounded px-3 py-2 text-sm text-text-muted cursor-default"
+                  onChange={e => setRemoteUrl(e.target.value)}
+                  placeholder="https://github.com/user/repo.git"
+                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary font-mono text-xs focus:outline-none focus:border-accent"
                 />
+                <p className="text-[0.6rem] text-text-muted mt-1">Set the origin remote URL to connect this repo to GitHub or another host</p>
               </div>
 
               {/* Path (read-only info) */}
@@ -182,11 +210,14 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border flex-shrink-0">
-          <div className="text-xs">
-            {error && <span className="text-danger">{error}</span>}
-          </div>
-          <div className="flex gap-2">
+        <div className="px-4 py-3 border-t border-border flex-shrink-0 space-y-2">
+          {error && (
+            <p className="text-danger text-xs">{error}</p>
+          )}
+          {warning && (
+            <p className="text-warning text-xs">{warning}</p>
+          )}
+          <div className="flex items-center justify-end gap-2">
             <button
               onClick={onClose}
               className="px-3 py-1.5 rounded text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"

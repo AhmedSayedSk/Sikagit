@@ -13,7 +13,7 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
   return (
     <div
       className={cn(
-        'flex items-center h-7 px-3 text-xs cursor-pointer border-b border-border/30',
+        'flex items-center h-full px-3 text-xs cursor-pointer border-b border-border/30',
         isSelected
           ? 'bg-accent-emphasis/20 text-text-primary'
           : 'hover:bg-bg-tertiary/50 text-text-secondary'
