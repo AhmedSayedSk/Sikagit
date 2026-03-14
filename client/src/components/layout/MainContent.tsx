@@ -13,6 +13,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { cn } from '../../lib/utils';
 import { api } from '../../lib/api';
 import { useToastStore } from '../../store/toastStore';
+import { useConfirmStore } from '../../store/confirmStore';
 
 export function MainContent() {
   const repos = useRepoStore(s => s.repos);
@@ -22,6 +23,7 @@ export function MainContent() {
   const { fetchAll, selectedFile, selectFile, status } = useStatusStore();
   const { commitListWidth, setCommitListWidth, bottomPanelHeight, setBottomPanelHeight } = useUIStore();
   const projects = useProjectStore(s => s.projects);
+  const confirm = useConfirmStore(s => s.confirm);
   const repoProject = activeRepoId ? projects.find(p => p.repoIds.includes(activeRepoId)) : undefined;
 
   const [remoteAction, setRemoteAction] = useState<'fetch' | 'pull' | 'push' | null>(null);
@@ -61,21 +63,59 @@ export function MainContent() {
     setRemoteAction(null);
   }, [repo, remoteAction, refreshAfterRemote, addToast]);
 
-  const handlePull = useCallback(async () => {
-    if (!repo || remoteAction) return;
+  const doPull = useCallback(async (repoPath: string, strategy?: 'merge' | 'rebase') => {
     setRemoteAction('pull');
     try {
-      const result = await api.gitPull(repo.path);
+      const result = await api.gitPull(repoPath, strategy);
       refreshAfterRemote();
       addToast('success', result.message || 'Pulled from remote');
     } catch (err: any) {
+      if (err.message === 'DIVERGED') {
+        setRemoteAction(null);
+        const wantsMerge = await confirm({
+          title: 'Divergent Branches',
+          message: 'Your local and remote branches have diverged. Would you like to merge?\n\nThis creates a merge commit combining both histories.',
+          confirmLabel: 'Merge',
+          cancelLabel: 'Other options...',
+          variant: 'warning',
+        });
+        if (wantsMerge) {
+          return doPull(repoPath, 'merge');
+        }
+        const wantsRebase = await confirm({
+          title: 'Rebase Instead?',
+          message: 'Would you like to rebase your local commits on top of remote?\n\nThis replays your commits on top of the remote branch for a cleaner history.',
+          confirmLabel: 'Rebase',
+          cancelLabel: 'Cancel',
+          variant: 'warning',
+        });
+        if (wantsRebase) {
+          return doPull(repoPath, 'rebase');
+        }
+        return;
+      }
       addToast('error', err.message || 'Pull failed');
     }
     setRemoteAction(null);
-  }, [repo, remoteAction, refreshAfterRemote, addToast]);
+  }, [refreshAfterRemote, addToast, confirm]);
+
+  const handlePull = useCallback(() => {
+    if (!repo || remoteAction) return;
+    doPull(repo.path);
+  }, [repo, remoteAction, doPull]);
 
   const handlePush = useCallback(async () => {
     if (!repo || remoteAction) return;
+    const ahead = status?.ahead ?? 0;
+    const confirmed = await confirm({
+      title: 'Push to Remote',
+      message: ahead > 0
+        ? `Push ${ahead} commit${ahead !== 1 ? 's' : ''} to remote?`
+        : 'Push to remote?',
+      confirmLabel: 'Push',
+      variant: 'info',
+    });
+    if (!confirmed) return;
     setRemoteAction('push');
     try {
       const setUpstream = !status?.tracking;
@@ -86,7 +126,7 @@ export function MainContent() {
       addToast('error', err.message || 'Push failed');
     }
     setRemoteAction(null);
-  }, [repo, remoteAction, status?.tracking, refreshAfterRemote, addToast]);
+  }, [repo, remoteAction, status?.tracking, status?.ahead, refreshAfterRemote, addToast, confirm]);
 
   if (!repo) {
     return (

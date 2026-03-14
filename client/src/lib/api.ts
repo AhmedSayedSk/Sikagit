@@ -122,13 +122,13 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo }),
   }),
-  gitPull: (repo: string) => request<{ message: string }>('/git/pull', {
+  gitPull: (repo: string, strategy?: 'merge' | 'rebase') => request<{ message: string }>('/git/pull', {
     method: 'POST',
-    body: JSON.stringify({ repo }),
+    body: JSON.stringify({ repo, strategy }),
   }),
-  gitPush: (repo: string, setUpstream?: boolean) => request<{ message: string }>('/git/push', {
+  gitPush: (repo: string, setUpstream?: boolean, upToCommit?: string) => request<{ message: string }>('/git/push', {
     method: 'POST',
-    body: JSON.stringify({ repo, setUpstream }),
+    body: JSON.stringify({ repo, setUpstream, upToCommit }),
   }),
 
   // AI

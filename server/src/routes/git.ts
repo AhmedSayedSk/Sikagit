@@ -199,14 +199,15 @@ router.post('/fetch', asyncHandler(async (req: Request, res: Response) => {
 
 router.post('/pull', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const message = await withRepoLock(repoPath, () => gitService.gitPull(repoPath));
+  const { strategy } = req.body || {};
+  const message = await withRepoLock(repoPath, () => gitService.gitPull(repoPath, strategy));
   res.json({ success: true, data: { message } });
 }));
 
 router.post('/push', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const { setUpstream } = req.body;
-  const message = await withRepoLock(repoPath, () => gitService.gitPush(repoPath, setUpstream));
+  const { setUpstream, upToCommit } = req.body;
+  const message = await withRepoLock(repoPath, () => gitService.gitPush(repoPath, setUpstream, upToCommit));
   res.json({ success: true, data: { message } });
 }));
 
