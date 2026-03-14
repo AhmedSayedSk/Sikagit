@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { X, Copy, Check, GitCommitHorizontal, User, Calendar, GitFork, Undo2, Loader2 } from 'lucide-react';
+import { X, Copy, Check, GitCommitHorizontal, User, Calendar, GitFork, Undo2, Loader2, Upload } from 'lucide-react';
 import { useLogStore } from '../../store/logStore';
 import { useStatusStore } from '../../store/statusStore';
 import { useToastStore } from '../../store/toastStore';
+import { useConfirmStore } from '../../store/confirmStore';
 import { api } from '../../lib/api';
 import { truncateHash } from '../../lib/utils';
 import { DiffView } from '../diff/DiffView';
@@ -15,10 +16,13 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   const { commits, selectedCommit, selectCommit, fetchLog } = useLogStore();
   const fetchStatus = useStatusStore(s => s.fetchStatus);
   const addToast = useToastStore(s => s.addToast);
+  const confirm = useConfirmStore(s => s.confirm);
   const commit = commits.find(c => c.hash === selectedCommit);
   const [diff, setDiff] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [uncommitting, setUncommitting] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const status = useStatusStore(s => s.status);
   const [scrollY, setScrollY] = useState(0);
   const collapseRef = useRef<HTMLDivElement>(null);
   const [collapseHeight, setCollapseHeight] = useState<number | null>(null);
@@ -88,6 +92,38 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   };
 
   const isHead = commits.length > 0 && commits[0].hash === commit.hash;
+  const commitIndex = commits.findIndex(c => c.hash === commit.hash);
+
+  // Find unpushed commits: everything above the first commit that has a remote branch (origin/*)
+  const remoteIndex = commits.findIndex(c => c.branches.some(b => b.includes('/')));
+  const hasRemote = !!(status?.tracking || status?.remoteUrl);
+  // If remote exists: commits before the remote branch marker are unpushed
+  // If no remote branch found in list but remote is configured, all commits are pushable
+  const isUnpushed = hasRemote && commitIndex >= 0 && (
+    remoteIndex === -1 || commitIndex < remoteIndex
+  );
+
+  const handlePushToHere = async () => {
+    const count = commitIndex >= 0 ? (remoteIndex === -1 ? commitIndex + 1 : remoteIndex - commitIndex) : 1;
+    const confirmed = await confirm({
+      title: 'Push to Here',
+      message: `Push ${count} commit${count !== 1 ? 's' : ''} up to ${truncateHash(commit.hash)}?`,
+      confirmLabel: 'Push',
+      variant: 'info',
+    });
+    if (!confirmed) return;
+    setPushing(true);
+    try {
+      const result = await api.gitPush(repoPath, false, commit.hash);
+      addToast('success', result.message);
+      fetchStatus(repoPath);
+      fetchLog(repoPath);
+    } catch (err: any) {
+      addToast('error', err.message || 'Push failed');
+    } finally {
+      setPushing(false);
+    }
+  };
 
   const handleUncommit = async () => {
     setUncommitting(true);
@@ -174,15 +210,29 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
                 <span className="font-mono text-text-muted">{commit.parentHashes.map(h => truncateHash(h)).join(', ')}</span>
               </span>
             )}
-            {isHead && (
-              <button
-                onClick={handleUncommit}
-                disabled={uncommitting}
-                className="inline-flex items-center gap-1 text-[0.65rem] text-warning hover:text-warning/80 disabled:opacity-40 ml-auto"
-              >
-                {uncommitting ? <Loader2 size={10} className="animate-spin" /> : <Undo2 size={10} />}
-                <span>Uncommit</span>
-              </button>
+            {(isHead || isUnpushed) && (
+              <span className="inline-flex items-center gap-1.5 ml-auto">
+                {isUnpushed && (
+                  <button
+                    onClick={handlePushToHere}
+                    disabled={pushing}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-accent/15 text-accent border border-accent/25 hover:bg-accent/25 disabled:opacity-40 transition-colors"
+                  >
+                    {pushing ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                    Push to here
+                  </button>
+                )}
+                {isHead && (
+                  <button
+                    onClick={handleUncommit}
+                    disabled={uncommitting}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-warning/15 text-warning border border-warning/25 hover:bg-warning/25 disabled:opacity-40 transition-colors"
+                  >
+                    {uncommitting ? <Loader2 size={11} className="animate-spin" /> : <Undo2 size={11} />}
+                    Uncommit
+                  </button>
+                )}
+              </span>
             )}
           </div>
         </div>
