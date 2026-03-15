@@ -20,6 +20,7 @@ export function CommitList({ repoPath }: CommitListProps) {
   const { status, selectFile } = useStatusStore();
   const {
     colGraphWidth, setColGraphWidth,
+    colTypeWidth, setColTypeWidth,
     colAuthorWidth, setColAuthorWidth,
     colDateWidth, setColDateWidth,
     colHashWidth, setColHashWidth,
@@ -52,7 +53,7 @@ export function CommitList({ repoPath }: CommitListProps) {
   const autoGraphWidth = getGraphWidth(totalLanes);
   const graphWidth = colGraphWidth ?? autoGraphWidth;
 
-  const columnWidths = { author: colAuthorWidth, date: colDateWidth, hash: colHashWidth };
+  const columnWidths = { type: colTypeWidth, author: colAuthorWidth, date: colDateWidth, hash: colHashWidth };
 
   if (loading && commits.length === 0) {
     return (
@@ -75,6 +76,8 @@ export function CommitList({ repoPath }: CommitListProps) {
         <span style={{ width: graphWidth }} className="flex-shrink-0">Graph</span>
         <ColumnResizeHandle onResize={delta => setColGraphWidth((colGraphWidth ?? autoGraphWidth) + delta)} />
         <span className="flex-1 ml-2">Description</span>
+        <ColumnResizeHandle onResize={delta => setColTypeWidth(colTypeWidth - delta)} />
+        <span style={{ width: colTypeWidth }} className="flex-shrink-0 pl-1">Type</span>
         <ColumnResizeHandle onResize={delta => setColAuthorWidth(colAuthorWidth - delta)} />
         <span style={{ width: colAuthorWidth }} className="flex-shrink-0 pl-1">Author</span>
         <ColumnResizeHandle onResize={delta => setColDateWidth(colDateWidth - delta)} />

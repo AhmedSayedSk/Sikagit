@@ -15,6 +15,7 @@ interface UIState {
   commitListWidth: number;
   bottomPanelHeight: number;
   colGraphWidth: number | null; // null = auto from lanes
+  colTypeWidth: number;
   colAuthorWidth: number;
   colDateWidth: number;
   colHashWidth: number;
@@ -33,6 +34,7 @@ interface UIState {
   setCommitListWidth: (width: number) => void;
   setBottomPanelHeight: (height: number) => void;
   setColGraphWidth: (width: number) => void;
+  setColTypeWidth: (width: number) => void;
   setColAuthorWidth: (width: number) => void;
   setColDateWidth: (width: number) => void;
   setColHashWidth: (width: number) => void;
@@ -67,6 +69,7 @@ export const useUIStore = create<UIState>()(
       commitListWidth: 500,
       bottomPanelHeight: 320,
       colGraphWidth: null,
+      colTypeWidth: 64,
       colAuthorWidth: 112,
       colDateWidth: 80,
       colHashWidth: 64,
@@ -93,6 +96,9 @@ export const useUIStore = create<UIState>()(
       }),
       setColGraphWidth: (width: number) => set({
         colGraphWidth: clamp(width, 30, 400),
+      }),
+      setColTypeWidth: (width: number) => set({
+        colTypeWidth: clamp(width, 40, 120),
       }),
       setColAuthorWidth: (width: number) => set({
         colAuthorWidth: clamp(width, 50, 300),
