@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot } from 'lucide-react';
 import { getRepoIcon } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -20,7 +20,7 @@ function RepoStatusDot({ repoId }: { repoId: string }) {
   if (ahead === 0 && behind === 0 && !hasChanges) return null;
 
   return (
-    <span className="flex items-center gap-0.5 flex-shrink-0">
+    <span className="w-[30px] flex items-center justify-end gap-0.5 flex-shrink-0">
       {ahead > 0 && (
         <span title={`${ahead} commit${ahead > 1 ? 's' : ''} ahead — push needed`} className="text-accent">
           <ArrowUp size={12} strokeWidth={2.5} />
@@ -31,8 +31,10 @@ function RepoStatusDot({ repoId }: { repoId: string }) {
           <ArrowDown size={12} strokeWidth={2.5} />
         </span>
       )}
-      {hasChanges && ahead === 0 && behind === 0 && (
-        <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" title="Uncommitted changes" />
+      {hasChanges && (
+        <span title="Uncommitted changes" className="text-success">
+          <CircleDot size={10} strokeWidth={2.5} />
+        </span>
       )}
     </span>
   );
@@ -57,7 +59,7 @@ function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos:
   if (hidden || (totalAhead === 0 && totalBehind === 0 && !anyChanges)) return null;
 
   return (
-    <span className="flex items-center gap-0.5 flex-shrink-0">
+    <span className="w-[30px] flex items-center justify-end gap-0.5 flex-shrink-0">
       {totalAhead > 0 && (
         <span title={`${totalAhead} commit${totalAhead > 1 ? 's' : ''} ahead — push needed`} className="text-accent">
           <ArrowUp size={12} strokeWidth={2.5} />
@@ -68,8 +70,10 @@ function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos:
           <ArrowDown size={12} strokeWidth={2.5} />
         </span>
       )}
-      {anyChanges && totalAhead === 0 && totalBehind === 0 && (
-        <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" title="Repos with uncommitted changes" />
+      {anyChanges && (
+        <span title="Repos with uncommitted changes" className="text-success">
+          <CircleDot size={10} strokeWidth={2.5} />
+        </span>
       )}
     </span>
   );
