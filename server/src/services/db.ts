@@ -36,9 +36,26 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS project_repos (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     repo_id TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (project_id, repo_id)
   );
 `);
+
+// Migrate: add position column to project_repos if missing
+const prCols = db.prepare("PRAGMA table_info(project_repos)").all() as { name: string }[];
+if (!prCols.some(c => c.name === 'position')) {
+  db.exec(`ALTER TABLE project_repos ADD COLUMN position INTEGER NOT NULL DEFAULT 0`);
+  // Back-fill positions based on rowid order
+  const rows = db.prepare('SELECT rowid, project_id, repo_id FROM project_repos ORDER BY project_id, rowid').all() as any[];
+  let prevProject = '';
+  let pos = 0;
+  const updatePos = db.prepare('UPDATE project_repos SET position = ? WHERE project_id = ? AND repo_id = ?');
+  for (const r of rows) {
+    if (r.project_id !== prevProject) { pos = 0; prevProject = r.project_id; }
+    updatePos.run(pos, r.project_id, r.repo_id);
+    pos++;
+  }
+}
 
 // Migrate existing databases: add avatar column, drop color/icon if present
 const columns = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
@@ -86,13 +103,13 @@ if (fs.existsSync(reposJsonPath) || fs.existsSync(projectsJsonPath)) {
         `INSERT OR IGNORE INTO projects (id, name, avatar, created_at) VALUES (@id, @name, @avatar, @createdAt)`
       );
       const insertProjectRepo = db.prepare(
-        `INSERT OR IGNORE INTO project_repos (project_id, repo_id) VALUES (@projectId, @repoId)`
+        `INSERT OR IGNORE INTO project_repos (project_id, repo_id, position) VALUES (@projectId, @repoId, @position)`
       );
       for (const p of projects) {
         insertProject.run({ id: p.id, name: p.name, avatar: (p as any).avatar ?? null, createdAt: p.createdAt });
-        for (const repoId of p.repoIds) {
-          insertProjectRepo.run({ projectId: p.id, repoId });
-        }
+        p.repoIds.forEach((repoId, position) => {
+          insertProjectRepo.run({ projectId: p.id, repoId, position });
+        });
       }
       fs.renameSync(projectsJsonPath, projectsJsonPath + '.migrated');
     }
@@ -180,10 +197,10 @@ const stmtInsertProject = db.prepare(
   `INSERT INTO projects (id, name, avatar, created_at) VALUES (@id, @name, @avatar, @createdAt)`
 );
 const stmtDeleteProject = db.prepare('DELETE FROM projects WHERE id = ?');
-const stmtProjectRepos = db.prepare('SELECT repo_id FROM project_repos WHERE project_id = ?');
+const stmtProjectRepos = db.prepare('SELECT repo_id FROM project_repos WHERE project_id = ? ORDER BY position');
 const stmtDeleteProjectRepos = db.prepare('DELETE FROM project_repos WHERE project_id = ?');
 const stmtInsertProjectRepo = db.prepare(
-  'INSERT INTO project_repos (project_id, repo_id) VALUES (@projectId, @repoId)'
+  'INSERT INTO project_repos (project_id, repo_id, position) VALUES (@projectId, @repoId, @position)'
 );
 
 function rowToProject(row: any, repoIds: string[]): Project {
@@ -220,9 +237,9 @@ export function insertProject(project: Project): void {
       avatar: project.avatar ?? null,
       createdAt: project.createdAt,
     });
-    for (const repoId of project.repoIds) {
-      stmtInsertProjectRepo.run({ projectId: project.id, repoId });
-    }
+    project.repoIds.forEach((repoId, position) => {
+      stmtInsertProjectRepo.run({ projectId: project.id, repoId, position });
+    });
   });
   insert();
 }
@@ -247,9 +264,9 @@ export function updateProject(
 
     if (data.repoIds !== undefined) {
       stmtDeleteProjectRepos.run(id);
-      for (const repoId of data.repoIds) {
-        stmtInsertProjectRepo.run({ projectId: id, repoId });
-      }
+      data.repoIds.forEach((repoId, position) => {
+        stmtInsertProjectRepo.run({ projectId: id, repoId, position });
+      });
     }
   });
   update();
