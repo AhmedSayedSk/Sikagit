@@ -162,11 +162,11 @@ export function MainContent() {
 
         {/* Remote actions */}
         {status && hasRemote && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center border border-border rounded-lg overflow-hidden">
             <button
               onClick={handleFetch}
               disabled={!!remoteAction}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors disabled:opacity-40 text-[0.7rem]"
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-tertiary border-r border-border transition-colors disabled:opacity-40 text-[0.7rem]"
             >
               {remoteAction === 'fetch' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
               <span>Fetch</span>
@@ -175,9 +175,9 @@ export function MainContent() {
               onClick={handlePull}
               disabled={!!remoteAction}
               className={cn(
-                'flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors disabled:opacity-40 text-[0.7rem]',
+                'flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary border-r border-border transition-colors disabled:opacity-40 text-[0.7rem]',
                 status.behind > 0
-                  ? 'text-warning hover:bg-warning/15'
+                  ? 'text-warning hover:bg-warning/10'
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
               )}
             >
@@ -191,14 +191,14 @@ export function MainContent() {
               onClick={handlePush}
               disabled={!!remoteAction}
               className={cn(
-                'flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors disabled:opacity-40 text-[0.7rem]',
+                'flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary transition-colors disabled:opacity-40 text-[0.7rem]',
                 status.ahead > 0
-                  ? 'text-accent hover:bg-accent/15'
+                  ? 'text-accent hover:bg-accent/10'
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
               )}
             >
-              {remoteAction === 'push' ? <Loader2 size={12} className="animate-spin" /> : <ArrowUp size={12} />}
-              <span>{status.tracking ? 'Push' : 'Push'}</span>
+              {remoteAction === 'push' ? <Loader2 size={12} className="animate-spin" /> : <ArrowUp size={12} className={status.ahead > 0 ? 'animate-bounce-up' : ''} />}
+              <span>Push</span>
               {status.ahead > 0 && (
                 <span className="ml-0.5 px-1.5 py-px rounded-full bg-accent/15 text-accent text-[0.6rem] font-semibold font-mono leading-none">{status.ahead}</span>
               )}
