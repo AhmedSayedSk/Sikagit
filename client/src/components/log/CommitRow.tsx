@@ -1,10 +1,10 @@
 import type { GraphCommit } from '@sikagit/shared';
-import { cn, formatDate, truncateHash } from '../../lib/utils';
+import { cn, formatDate, truncateHash, detectCommitType } from '../../lib/utils';
 
 interface CommitRowProps {
   commit: GraphCommit;
   graphWidth: number;
-  columnWidths: { author: number; date: number; hash: number };
+  columnWidths: { type: number; author: number; date: number; hash: number };
   isSelected: boolean;
   onClick: () => void;
 }
@@ -56,6 +56,19 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
         <span className={cn(commit.isHead && 'font-semibold text-text-primary')}>
           {commit.message}
         </span>
+      </span>
+
+      {/* Type */}
+      <span style={{ width: columnWidths.type }} className="flex-shrink-0 pl-1 flex items-center">
+        {(() => {
+          const commitType = detectCommitType(commit.message);
+          if (!commitType) return null;
+          return (
+            <span className={cn('px-1.5 py-px rounded text-[0.575rem] font-medium leading-tight', commitType.color, commitType.bg)}>
+              {commitType.label}
+            </span>
+          );
+        })()}
       </span>
 
       {/* Author */}
