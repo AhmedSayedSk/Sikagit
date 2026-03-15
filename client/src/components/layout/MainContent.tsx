@@ -8,7 +8,8 @@ import { CommitDetail } from '../log/CommitDetail';
 import { FileDiffPanel } from '../diff/FileDiffPanel';
 import { FileStatusPanel } from '../files/FileStatusPanel';
 import { ResizeHandle } from '../ui/ResizeHandle';
-import { GitBranch, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2 } from 'lucide-react';
+import { RepoSettingsDialog } from '../operations/RepoSettingsDialog';
+import { GitBranch, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2, Settings, Trash2 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { cn } from '../../lib/utils';
 import { api } from '../../lib/api';
@@ -18,6 +19,7 @@ import { useConfirmStore } from '../../store/confirmStore';
 export function MainContent() {
   const repos = useRepoStore(s => s.repos);
   const activeRepoId = useRepoStore(s => s.activeRepoId);
+  const removeRepo = useRepoStore(s => s.removeRepo);
   const repo = repos.find(r => r.id === activeRepoId);
   const { fetchLog, selectedCommit, selectCommit } = useLogStore();
   const { fetchAll, selectedFile, selectFile, status } = useStatusStore();
@@ -27,6 +29,7 @@ export function MainContent() {
   const repoProject = activeRepoId ? projects.find(p => p.repoIds.includes(activeRepoId)) : undefined;
 
   const [remoteAction, setRemoteAction] = useState<'fetch' | 'pull' | 'push' | null>(null);
+  const [showRepoSettings, setShowRepoSettings] = useState(false);
   const addToast = useToastStore(s => s.addToast);
 
   useEffect(() => {
@@ -158,6 +161,30 @@ export function MainContent() {
           </div>
         )}
         <span className="text-sm font-semibold text-text-primary">{repo.name}</span>
+        <div className="flex items-center gap-0.5 ml-1">
+          <button
+            onClick={() => setShowRepoSettings(true)}
+            className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+            title="Repository settings"
+          >
+            <Settings size={12} />
+          </button>
+          <button
+            onClick={async () => {
+              const confirmed = await confirm({
+                title: 'Remove Repository',
+                message: `Are you sure you want to remove "${repo.name}" from SikaGit? This will not delete the repository files on disk.`,
+                confirmLabel: 'Remove',
+                variant: 'danger',
+              });
+              if (confirmed) removeRepo(repo.id);
+            }}
+            className="p-1 rounded hover:bg-danger/20 text-text-muted hover:text-danger transition-colors"
+            title="Remove repository"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
         <span className="text-xs text-text-secondary flex-1">{repo.displayPath}</span>
 
         {/* Remote actions */}
@@ -273,6 +300,11 @@ export function MainContent() {
           </>
         )}
       </div>
+
+      {/* Repo settings dialog */}
+      {showRepoSettings && repo && (
+        <RepoSettingsDialog repo={repo} onClose={() => setShowRepoSettings(false)} />
+      )}
     </div>
   );
 }

@@ -1,57 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, FolderGit2, Settings, SlidersHorizontal, FolderKanban, ChevronRight, Pencil, GitBranch } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil } from 'lucide-react';
 import { getRepoIcon } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { AddRepoDialog } from '../operations/AddRepoDialog';
-import { RepoSettingsDialog } from '../operations/RepoSettingsDialog';
 import { AppSettingsDialog } from '../operations/AppSettingsDialog';
 import { ProjectDialog } from '../operations/ProjectDialog';
 import { useConfirmStore } from '../../store/confirmStore';
 import { cn } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
-
-function RepoItem({ repo, isActive, onSelect, onSettings, onRemove }: {
-  repo: RepoBookmark;
-  isActive: boolean;
-  onSelect: () => void;
-  onSettings: () => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        'group flex items-center gap-2 mx-2 px-3 py-1.5 cursor-pointer transition-colors rounded-md',
-        isActive
-          ? 'bg-accent-emphasis/20 text-accent'
-          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-      )}
-      onClick={onSelect}
-    >
-      {(() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
-      <div className="flex-1 min-w-0">
-        <div className="truncate font-medium">{repo.name}</div>
-      </div>
-      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
-        <button
-          onClick={e => { e.stopPropagation(); onSettings(); }}
-          className="p-0.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary"
-          title="Settings"
-        >
-          <Settings size={10} />
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); onRemove(); }}
-          className="p-0.5 rounded hover:bg-danger/20 text-text-muted hover:text-danger"
-          title="Remove"
-        >
-          <Trash2 size={10} />
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function CollapsiblePanel({ expanded, children }: { expanded: boolean; children: React.ReactNode }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -90,19 +48,219 @@ function CollapsiblePanel({ expanded, children }: { expanded: boolean; children:
   );
 }
 
-function ProjectSection({ project, repos, activeRepoId, expanded, onToggle, onSelectRepo, onSettingsRepo, onRemoveRepo, onEditProject, onDeleteProject }: {
+const DRAG_THRESHOLD = 5; // px of movement before drag activates
+
+function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, onReorderRepos }: {
+  projectRepos: RepoBookmark[];
+  repoIds: string[];
+  activeRepoId: string | null;
+  onSelectRepo: (id: string) => void;
+  onReorderRepos: (repoIds: string[]) => void;
+}) {
+  const [dragState, setDragState] = useState<{
+    fromIdx: number;
+    toIdx: number;
+    offsetY: number;   // cursor offset from top of dragged item
+    currentY: number;  // current cursor Y
+    startRect: DOMRect; // original rect of dragged item
+    rects: DOMRect[];  // snapshot of all item rects at drag start
+  } | null>(null);
+
+  const dragRef = useRef<typeof dragState>(null);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const repoIdsRef = useRef(repoIds);
+  repoIdsRef.current = repoIds;
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent, idx: number) => {
+    // Only left click
+    if (e.button !== 0) return;
+    e.preventDefault();
+
+    const rowEl = rowRefs.current[idx];
+    if (!rowEl) return;
+
+    const startRect = rowEl.getBoundingClientRect();
+    const startY = e.clientY;
+    const offsetY = e.clientY - startRect.top;
+    let activated = false;
+
+    // Snapshot all rects at start
+    const rects = rowRefs.current.map(el => el?.getBoundingClientRect() ?? new DOMRect());
+
+    const activate = () => {
+      activated = true;
+      const state = {
+        fromIdx: idx,
+        toIdx: idx,
+        offsetY,
+        currentY: startY,
+        startRect,
+        rects,
+      };
+      dragRef.current = state;
+      setDragState(state);
+    };
+
+    const handleMove = (ev: PointerEvent) => {
+      if (!activated) {
+        // Check threshold
+        if (Math.abs(ev.clientY - startY) >= DRAG_THRESHOLD) {
+          activate();
+        } else {
+          return;
+        }
+      }
+
+      // Find closest drop target by midpoint
+      let closest = idx;
+      let minDist = Infinity;
+      for (let i = 0; i < rects.length; i++) {
+        const r = rects[i];
+        const midY = r.top + r.height / 2;
+        const dist = Math.abs(ev.clientY - midY);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = i;
+        }
+      }
+
+      const state = {
+        fromIdx: idx,
+        toIdx: closest,
+        offsetY,
+        currentY: ev.clientY,
+        startRect,
+        rects,
+      };
+      dragRef.current = state;
+      setDragState(state);
+    };
+
+    const handleUp = () => {
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', handleUp);
+
+      if (!activated) {
+        // It was a click, not a drag
+        onSelectRepo(projectRepos[idx].id);
+        return;
+      }
+
+      const drag = dragRef.current;
+      if (drag && drag.fromIdx !== drag.toIdx) {
+        const ids = [...repoIdsRef.current];
+        const [moved] = ids.splice(drag.fromIdx, 1);
+        ids.splice(drag.toIdx, 0, moved);
+        onReorderRepos(ids);
+      }
+
+      dragRef.current = null;
+      setDragState(null);
+    };
+
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', handleUp);
+  }, [onSelectRepo, onReorderRepos, projectRepos]);
+
+  // Compute translateY for each item during drag
+  const getItemStyle = (idx: number): React.CSSProperties => {
+    if (!dragState) return {};
+    const { fromIdx, toIdx, currentY, offsetY, startRect, rects } = dragState;
+
+    if (idx === fromIdx) {
+      // The dragged item: follows the cursor
+      const dragY = currentY - offsetY - startRect.top;
+      return {
+        transform: `translateY(${dragY}px) scale(1.02)`,
+        zIndex: 50,
+        position: 'relative',
+        transition: 'none',
+        opacity: 1,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+      };
+    }
+
+    // Other items: shift up or down to make room
+    const itemH = rects[fromIdx]?.height ?? 0;
+    if (fromIdx < toIdx) {
+      // Dragging down: items between from+1..to shift up
+      if (idx > fromIdx && idx <= toIdx) {
+        return { transform: `translateY(${-itemH}px)`, transition: 'transform 200ms ease' };
+      }
+    } else if (fromIdx > toIdx) {
+      // Dragging up: items between to..from-1 shift down
+      if (idx >= toIdx && idx < fromIdx) {
+        return { transform: `translateY(${itemH}px)`, transition: 'transform 200ms ease' };
+      }
+    }
+    return { transform: 'translateY(0)', transition: 'transform 200ms ease' };
+  };
+
+  return (
+    <div ref={containerRef} className="relative ml-2 mt-0.5 mb-1.5">
+      {/* Tree vertical line */}
+      {projectRepos.length > 0 && (
+        <div
+          className="absolute left-[7px] top-0 w-px bg-accent/25"
+          style={{ bottom: 14 }}
+        />
+      )}
+      {projectRepos.length === 0 ? (
+        <p className="text-[0.75em] text-text-muted px-3 py-1 text-center">No repositories</p>
+      ) : (
+        projectRepos.map((repo, idx) => {
+          const isDragging = dragState?.fromIdx === idx;
+          const itemStyle = getItemStyle(idx);
+
+          return (
+            <div
+              key={repo.id}
+              ref={el => { rowRefs.current[idx] = el; }}
+              className="relative"
+              style={itemStyle}
+            >
+              {/* Tree horizontal branch */}
+              <div className="absolute left-[7px] top-1/2 w-1.5 h-px bg-accent/25" />
+              <div className="ml-3">
+                <div
+                  className={cn(
+                    'flex items-center gap-2 mx-1 px-2 py-1.5 cursor-pointer rounded-md select-none',
+                    repo.id === activeRepoId
+                      ? 'bg-accent-emphasis/20 text-accent'
+                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                    isDragging && 'bg-bg-tertiary ring-1 ring-accent/30 cursor-grabbing'
+                  )}
+                  onPointerDown={e => handlePointerDown(e, idx)}
+                >
+                  {(() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate font-medium">{repo.name}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function ProjectSection({ project, repos, activeRepoId, expanded, onToggle, onSelectRepo, onEditProject, onDeleteProject, onReorderRepos }: {
   project: Project;
   repos: RepoBookmark[];
   activeRepoId: string | null;
   expanded: boolean;
   onToggle: () => void;
   onSelectRepo: (id: string) => void;
-  onSettingsRepo: (repo: RepoBookmark) => void;
-  onRemoveRepo: (id: string) => void;
   onEditProject: () => void;
   onDeleteProject: () => void;
+  onReorderRepos: (repoIds: string[]) => void;
 }) {
-  const projectRepos = repos.filter(r => project.repoIds.includes(r.id));
+  const projectRepos = project.repoIds
+    .map(id => repos.find(r => r.id === id))
+    .filter((r): r is RepoBookmark => !!r);
 
   return (
     <div className={cn(
@@ -131,61 +289,61 @@ function ProjectSection({ project, repos, activeRepoId, expanded, onToggle, onSe
             className="p-0.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary"
             title="Edit project"
           >
-            <Pencil size={9} />
+            <Pencil size={10} />
           </button>
           <button
             onClick={e => { e.stopPropagation(); onDeleteProject(); }}
             className="p-0.5 rounded hover:bg-danger/20 text-text-muted hover:text-danger"
             title="Delete project"
           >
-            <Trash2 size={9} />
+            <Trash2 size={10} />
           </button>
         </div>
+        <span className="text-[0.6rem] text-text-muted">{projectRepos.length}</span>
       </div>
 
       {/* Project repos — animated collapse */}
       <CollapsiblePanel expanded={expanded}>
-        <div className="relative ml-3 mt-1 mb-2">
-          {/* Tree vertical line */}
-          {projectRepos.length > 0 && (
-            <div
-              className="absolute left-[10px] top-0 w-px bg-accent/30"
-              style={{ bottom: 14 }}
-            />
-          )}
-          {projectRepos.length === 0 ? (
-            <p className="text-[0.75em] text-text-muted px-3 py-1 text-center">No repositories</p>
-          ) : (
-            projectRepos.map((repo, i) => (
-              <div key={repo.id} className="relative">
-                {/* Tree horizontal branch */}
-                <div
-                  className="absolute left-[10px] top-1/2 w-2 h-px bg-accent/30"
-                />
-                <div className="ml-4">
-                  <RepoItem
-                    repo={repo}
-                    isActive={activeRepoId === repo.id}
-                    onSelect={() => onSelectRepo(repo.id)}
-                    onSettings={() => onSettingsRepo(repo)}
-                    onRemove={() => onRemoveRepo(repo.id)}
-                  />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <DraggableRepoList
+          projectRepos={projectRepos}
+          repoIds={project.repoIds}
+          activeRepoId={activeRepoId}
+          onSelectRepo={onSelectRepo}
+          onReorderRepos={onReorderRepos}
+        />
       </CollapsiblePanel>
     </div>
   );
 }
 
+function RepoItem({ repo, isActive, onSelect }: {
+  repo: RepoBookmark;
+  isActive: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-2 mx-1 px-2 py-1.5 cursor-pointer transition-colors rounded-md',
+        isActive
+          ? 'bg-accent-emphasis/20 text-accent'
+          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+      )}
+      onClick={onSelect}
+    >
+      {(() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
+      <div className="flex-1 min-w-0">
+        <div className="truncate font-medium">{repo.name}</div>
+      </div>
+    </div>
+  );
+}
+
 export function Sidebar() {
-  const { repos, activeRepoId, setActiveRepo, removeRepo } = useRepoStore();
-  const { projects, fetchProjects, deleteProject } = useProjectStore();
+  const { repos, activeRepoId, setActiveRepo } = useRepoStore();
+  const { projects, fetchProjects, deleteProject, updateProject } = useProjectStore();
   const fontSize = useUIStore(s => s.fontSize);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [settingsRepo, setSettingsRepo] = useState<RepoBookmark | null>(null);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project }>({ open: false });
   const confirm = useConfirmStore(s => s.confirm);
@@ -255,27 +413,17 @@ export function Sidebar() {
                 expanded={expandedProjectId === project.id}
                 onToggle={() => setExpandedProjectId(expandedProjectId === project.id ? null : project.id)}
                 onSelectRepo={(id) => { setActiveRepo(id); setExpandedProjectId(project.id); }}
-                onSettingsRepo={setSettingsRepo}
-                onRemoveRepo={async (id) => {
-                  const r = repos.find(r => r.id === id);
-                  const confirmed = await confirm({
-                    title: 'Remove Repository',
-                    message: `Are you sure you want to remove "${r?.name || 'this repository'}" from SikaGit? This will not delete the repository files on disk.`,
-                    confirmLabel: 'Remove',
-                    variant: 'danger',
-                  });
-                  if (confirmed) removeRepo(id);
-                }}
                 onEditProject={() => setProjectDialog({ open: true, project })}
                 onDeleteProject={async () => {
                   const confirmed = await confirm({
                     title: 'Delete Project',
-                    message: `Are you sure you want to delete the project "${project.name}"? The repositories inside will not be removed.`,
+                    message: `Are you sure you want to delete "${project.name}"? Repositories will not be removed.`,
                     confirmLabel: 'Delete',
                     variant: 'danger',
                   });
                   if (confirmed) deleteProject(project.id);
                 }}
+                onReorderRepos={(repoIds) => updateProject(project.id, { repoIds })}
               />
             ))}
 
@@ -291,16 +439,6 @@ export function Sidebar() {
                 repo={repo}
                 isActive={activeRepoId === repo.id}
                 onSelect={() => setActiveRepo(repo.id)}
-                onSettings={() => setSettingsRepo(repo)}
-                onRemove={async () => {
-                  const confirmed = await confirm({
-                    title: 'Remove Repository',
-                    message: `Are you sure you want to remove "${repo.name}" from SikaGit? This will not delete the repository files on disk.`,
-                    confirmLabel: 'Remove',
-                    variant: 'danger',
-                  });
-                  if (confirmed) removeRepo(repo.id);
-                }}
               />
             ))}
           </>
@@ -324,7 +462,6 @@ export function Sidebar() {
 
       {/* Dialogs */}
       {showAddDialog && <AddRepoDialog onClose={() => setShowAddDialog(false)} />}
-      {settingsRepo && <RepoSettingsDialog repo={settingsRepo} onClose={() => setSettingsRepo(null)} />}
       {showAppSettings && <AppSettingsDialog onClose={() => setShowAppSettings(false)} />}
       {projectDialog.open && (
         <ProjectDialog
