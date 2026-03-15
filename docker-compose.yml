@@ -23,6 +23,7 @@ services:
       - CORS_ORIGINS=http://localhost:3200,http://127.0.0.1:3200
       - DATA_DIR=/app/server/data
       - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no
+      - AZURE_DEVOPS_PAT=${AZURE_DEVOPS_PAT:-}
     restart: unless-stopped
 
   client:
