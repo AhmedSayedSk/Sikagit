@@ -50,6 +50,12 @@ function fileName(path: string): string {
   return lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function FileRow({ file, isActive, onClick, actions, showFullPath }: {
   file: GitFileStatus;
   isActive: boolean;
@@ -72,6 +78,11 @@ function FileRow({ file, isActive, onClick, actions, showFullPath }: {
       <span title={label} className="flex-shrink-0"><StatusIcon size={13} className={color} /></span>
       <span title={typeLabel} className="flex-shrink-0" style={{ color: typeColor }}><TypeIcon size={13} /></span>
       <span className="flex-1 truncate">{showFullPath ? file.path : fileName(file.path)}</span>
+      {file.size != null && file.size >= 102400 && (
+        <span className="text-[0.6rem] text-text-muted flex-shrink-0" title={`${file.size.toLocaleString()} bytes`}>
+          {formatFileSize(file.size)}
+        </span>
+      )}
       {actions}
     </div>
   );
@@ -156,10 +167,19 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     return () => clearInterval(interval);
   }, [repoPath, fetchStatus]);
 
-  const handleSelectFile = useCallback((path: string | null, source: 'staged' | 'unstaged') => {
-    selectFile(path, source);
-    if (path) selectCommit(null);
-  }, [selectFile, selectCommit]);
+  const handleSelectFile = useCallback(async (file: GitFileStatus | null, source: 'staged' | 'unstaged') => {
+    if (file && file.size && file.size >= 1024 * 1024) {
+      const confirmed = await confirm({
+        title: 'Large File',
+        message: `"${fileName(file.path)}" is ${formatFileSize(file.size)}. Displaying the diff may be slow or freeze the UI. Open anyway?`,
+        confirmLabel: 'Open',
+        variant: 'danger',
+      });
+      if (!confirmed) return;
+    }
+    selectFile(file?.path ?? null, source);
+    if (file) selectCommit(null);
+  }, [selectFile, selectCommit, confirm]);
 
   const selectNextInList = useCallback((list: GitFileStatus[], file: string, source: 'staged' | 'unstaged') => {
     if (selectedFile !== file || selectedFileSource !== source) return;
@@ -172,9 +192,18 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     }
   }, [selectedFile, selectedFileSource, selectFile]);
 
-  const stageFile = async (file: string) => {
-    selectNextInList(unstagedFiles, file, 'unstaged');
-    await api.stageFiles(repoPath, [file]);
+  const stageFile = async (file: GitFileStatus) => {
+    if (file.size && file.size >= 1024 * 1024) {
+      const confirmed = await confirm({
+        title: 'Stage Large File',
+        message: `"${fileName(file.path)}" is ${formatFileSize(file.size)}. Are you sure you want to stage this large file?`,
+        confirmLabel: 'Stage',
+        variant: 'danger',
+      });
+      if (!confirmed) return;
+    }
+    selectNextInList(unstagedFiles, file.path, 'unstaged');
+    await api.stageFiles(repoPath, [file.path]);
     await refresh();
   };
 
@@ -187,7 +216,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const stageAll = async () => {
     if (!status) return;
     selectFile(null);
-    const files = [...status.unstaged.map(f => f.path), ...status.untracked];
+    const files = [...status.unstaged.map(f => f.path), ...status.untracked.map(f => f.path)];
     await api.stageFiles(repoPath, files);
     await refresh();
   };
@@ -231,9 +260,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
 
   const unstagedFiles: GitFileStatus[] = useMemo(() => {
     if (!status) return [];
-    return [...status.unstaged, ...status.untracked.map(p => ({
-      path: p, index: '?', workingDir: '?', isStaged: false, isConflicted: false,
-    }))];
+    return [...status.unstaged, ...status.untracked];
   }, [status]);
 
   const unstagedGroups = useMemo(() => groupByFolder(unstagedFiles), [unstagedFiles]);
@@ -310,13 +337,13 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                     showFullPath={!groupFilesByFolder}
                     isActive={selectedFile === f.path && selectedFileSource === 'unstaged'}
                     onClick={() => handleSelectFile(
-                      selectedFile === f.path && selectedFileSource === 'unstaged' ? null : f.path,
+                      selectedFile === f.path && selectedFileSource === 'unstaged' ? null : f,
                       'unstaged'
                     )}
                     actions={
                       <div className="flex gap-1.5 opacity-0 group-hover:opacity-100">
                         <button
-                          onClick={e => { e.stopPropagation(); stageFile(f.path); }}
+                          onClick={e => { e.stopPropagation(); stageFile(f); }}
                           className="p-1 rounded bg-success/15 text-success/80 hover:bg-success/25 hover:text-success transition-colors"
                           title="Stage"
                         >
@@ -441,7 +468,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                     showFullPath={!groupFilesByFolder}
                     isActive={selectedFile === f.path && selectedFileSource === 'staged'}
                     onClick={() => handleSelectFile(
-                      selectedFile === f.path && selectedFileSource === 'staged' ? null : f.path,
+                      selectedFile === f.path && selectedFileSource === 'staged' ? null : f,
                       'staged'
                     )}
                     actions={

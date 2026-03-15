@@ -49,6 +49,7 @@ export interface GitFileStatus {
   workingDir: string;
   isStaged: boolean;
   isConflicted: boolean;
+  size?: number; // file size in bytes
 }
 
 export interface GitDiffFile {
@@ -104,7 +105,7 @@ export interface GitStatus {
   files: GitFileStatus[];
   staged: GitFileStatus[];
   unstaged: GitFileStatus[];
-  untracked: string[];
+  untracked: GitFileStatus[];
   conflicted: string[];
 }
 

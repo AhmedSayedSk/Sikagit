@@ -1,6 +1,6 @@
 import simpleGit, { SimpleGit } from 'simple-git';
 import { execSync } from 'child_process';
-import { readFileSync, readdirSync, existsSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 import type { GitCommit, GitBranch, GitTag, GitFileStatus, GitStatus } from '@sikagit/shared';
 import { normalizePath } from './pathService';
@@ -77,13 +77,25 @@ export async function getStatus(repoPath: string): Promise<GitStatus> {
   const git = getGit(repoPath);
   const status = await git.status();
 
-  const mapFile = (f: { path: string; index: string; working_dir: string }): GitFileStatus => ({
-    path: f.path,
-    index: f.index,
-    workingDir: f.working_dir,
-    isStaged: f.index !== ' ' && f.index !== '?' && f.index !== '!',
-    isConflicted: f.working_dir === 'U' || f.index === 'U',
-  });
+  const normalized = normalizePath(repoPath);
+  const mapFile = (f: { path: string; index: string; working_dir: string }): GitFileStatus => {
+    let size: number | undefined;
+    // Only get size for files that exist on disk (not deleted)
+    if (f.working_dir !== 'D' && f.index !== 'D') {
+      try {
+        const fullPath = join(normalized, f.path);
+        size = statSync(fullPath).size;
+      } catch { /* file may not exist */ }
+    }
+    return {
+      path: f.path,
+      index: f.index,
+      workingDir: f.working_dir,
+      isStaged: f.index !== ' ' && f.index !== '?' && f.index !== '!',
+      isConflicted: f.working_dir === 'U' || f.index === 'U',
+      size,
+    };
+  };
 
   const files = status.files.map(mapFile);
 
@@ -105,7 +117,7 @@ export async function getStatus(repoPath: string): Promise<GitStatus> {
     files,
     staged: files.filter(f => f.isStaged),
     unstaged: files.filter(f => f.workingDir !== ' ' && f.workingDir !== '?' && f.workingDir !== '!'),
-    untracked: status.not_added,
+    untracked: files.filter(f => f.index === '?' && f.workingDir === '?'),
     conflicted: status.conflicted,
   };
 }
