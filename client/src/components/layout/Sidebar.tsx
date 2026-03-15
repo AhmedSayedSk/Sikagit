@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil } from 'lucide-react';
+import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown } from 'lucide-react';
 import { getRepoIcon } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -8,8 +8,72 @@ import { AddRepoDialog } from '../operations/AddRepoDialog';
 import { AppSettingsDialog } from '../operations/AppSettingsDialog';
 import { ProjectDialog } from '../operations/ProjectDialog';
 import { useConfirmStore } from '../../store/confirmStore';
+import { useRepoStatusStore } from '../../store/repoStatusStore';
 import { cn } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
+
+function RepoStatusDot({ repoId }: { repoId: string }) {
+  const summary = useRepoStatusStore(s => s.summaries[repoId]);
+  if (!summary) return null;
+
+  const { ahead, behind, hasChanges } = summary;
+  if (ahead === 0 && behind === 0 && !hasChanges) return null;
+
+  return (
+    <span className="flex items-center gap-0.5 flex-shrink-0">
+      {ahead > 0 && (
+        <span title={`${ahead} commit${ahead > 1 ? 's' : ''} ahead — push needed`} className="text-accent">
+          <ArrowUp size={12} strokeWidth={2.5} />
+        </span>
+      )}
+      {behind > 0 && (
+        <span title={`${behind} commit${behind > 1 ? 's' : ''} behind — pull needed`} className="text-warning">
+          <ArrowDown size={12} strokeWidth={2.5} />
+        </span>
+      )}
+      {hasChanges && ahead === 0 && behind === 0 && (
+        <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" title="Uncommitted changes" />
+      )}
+    </span>
+  );
+}
+
+function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos: RepoBookmark[]; hidden?: boolean }) {
+  const summaries = useRepoStatusStore(s => s.summaries);
+  const projectRepoIds = project.repoIds.filter(id => repos.some(r => r.id === id));
+
+  let totalAhead = 0;
+  let totalBehind = 0;
+  let anyChanges = false;
+
+  for (const id of projectRepoIds) {
+    const s = summaries[id];
+    if (!s) continue;
+    totalAhead += s.ahead;
+    totalBehind += s.behind;
+    if (s.hasChanges) anyChanges = true;
+  }
+
+  if (hidden || (totalAhead === 0 && totalBehind === 0 && !anyChanges)) return null;
+
+  return (
+    <span className="flex items-center gap-0.5 flex-shrink-0">
+      {totalAhead > 0 && (
+        <span title={`${totalAhead} commit${totalAhead > 1 ? 's' : ''} ahead — push needed`} className="text-accent">
+          <ArrowUp size={12} strokeWidth={2.5} />
+        </span>
+      )}
+      {totalBehind > 0 && (
+        <span title={`${totalBehind} commit${totalBehind > 1 ? 's' : ''} behind — pull needed`} className="text-warning">
+          <ArrowDown size={12} strokeWidth={2.5} />
+        </span>
+      )}
+      {anyChanges && totalAhead === 0 && totalBehind === 0 && (
+        <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" title="Repos with uncommitted changes" />
+      )}
+    </span>
+  );
+}
 
 function CollapsiblePanel({ expanded, children }: { expanded: boolean; children: React.ReactNode }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -237,6 +301,7 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
                   <div className="flex-1 min-w-0">
                     <div className="truncate font-medium">{repo.name}</div>
                   </div>
+                  <RepoStatusDot repoId={repo.id} />
                 </div>
               </div>
             </div>
@@ -299,7 +364,7 @@ function ProjectSection({ project, repos, activeRepoId, expanded, onToggle, onSe
             <Trash2 size={10} />
           </button>
         </div>
-        <span className="text-[0.6rem] text-text-muted">{projectRepos.length}</span>
+        <ProjectStatusDot project={project} repos={repos} hidden={expanded} />
       </div>
 
       {/* Project repos — animated collapse */}
@@ -335,6 +400,7 @@ function RepoItem({ repo, isActive, onSelect }: {
       <div className="flex-1 min-w-0">
         <div className="truncate font-medium">{repo.name}</div>
       </div>
+      <RepoStatusDot repoId={repo.id} />
     </div>
   );
 }
@@ -342,11 +408,21 @@ function RepoItem({ repo, isActive, onSelect }: {
 export function Sidebar() {
   const { repos, activeRepoId, setActiveRepo } = useRepoStore();
   const { projects, fetchProjects, deleteProject, updateProject } = useProjectStore();
+  const fetchAllStatus = useRepoStatusStore(s => s.fetchAll);
   const fontSize = useUIStore(s => s.fontSize);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project }>({ open: false });
   const confirm = useConfirmStore(s => s.confirm);
+
+  // Poll repo status summaries every 30 seconds
+  useEffect(() => {
+    if (repos.length === 0) return;
+    const repoList = repos.map(r => ({ id: r.id, path: r.path }));
+    fetchAllStatus(repoList);
+    const interval = setInterval(() => fetchAllStatus(repoList), 30_000);
+    return () => clearInterval(interval);
+  }, [repos, fetchAllStatus]);
 
   // Accordion: only one project expanded at a time; auto-expand project containing active repo
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);

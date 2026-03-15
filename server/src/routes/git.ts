@@ -6,14 +6,36 @@ import { computeGraph } from '../services/graphService';
 
 const router = Router();
 
-// All git routes require a repo query param
-router.use(validateRepoPath);
-
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req, res, next).catch(next);
   };
 }
+
+// Batch status summary — before validateRepoPath since it takes multiple repos
+router.post('/status-summary', asyncHandler(async (req: Request, res: Response) => {
+  const { repos } = req.body as { repos: { id: string; path: string }[] };
+  if (!Array.isArray(repos)) {
+    res.status(400).json({ success: false, error: 'repos array required' });
+    return;
+  }
+  const results: Record<string, { ahead: number; behind: number; hasChanges: boolean }> = {};
+  await Promise.all(
+    repos.map(async ({ id, path: repoPath }) => {
+      try {
+        const { normalizePath } = await import('../services/pathService');
+        const normalized = normalizePath(repoPath);
+        results[id] = await gitService.getStatusSummary(normalized);
+      } catch {
+        // Skip repos that fail (e.g. deleted, not a git repo)
+      }
+    })
+  );
+  res.json({ success: true, data: results });
+}));
+
+// All other git routes require a repo query param
+router.use(validateRepoPath);
 
 router.get('/status', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;

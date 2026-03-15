@@ -48,6 +48,11 @@ export const api = {
 
   // Git
   getStatus: (repo: string) => request<import('@sikagit/shared').GitStatus>(`/git/status?repo=${encodeURIComponent(repo)}`),
+  getStatusSummary: (repos: { id: string; path: string }[]) =>
+    request<Record<string, { ahead: number; behind: number; hasChanges: boolean }>>('/git/status-summary', {
+      method: 'POST',
+      body: JSON.stringify({ repos }),
+    }),
   getLog: (repo: string, limit = 200, skip = 0) =>
     request<import('@sikagit/shared').GitCommit[]>(`/git/log?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}`),
   getGraph: (repo: string, limit = 200, skip = 0) =>

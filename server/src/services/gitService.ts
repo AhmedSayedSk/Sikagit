@@ -110,6 +110,20 @@ export async function getStatus(repoPath: string): Promise<GitStatus> {
   };
 }
 
+export async function getStatusSummary(repoPath: string): Promise<{
+  ahead: number;
+  behind: number;
+  hasChanges: boolean;
+}> {
+  const git = getGit(repoPath);
+  const status = await git.status();
+  return {
+    ahead: status.ahead,
+    behind: status.behind,
+    hasChanges: status.files.length > 0,
+  };
+}
+
 export async function getLog(
   repoPath: string,
   limit = 200,
