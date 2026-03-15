@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitCommitHorizontal, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning, Sparkles } from 'lucide-react';
+import { getFileIcon } from '../../lib/fileIcons';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useUIStore } from '../../store/uiStore';
@@ -56,18 +57,20 @@ function FileRow({ file, isActive, onClick, actions, showFullPath }: {
   actions: React.ReactNode;
   showFullPath?: boolean;
 }) {
-  const { Icon, color, label } = getStatusIcon(file.index, file.workingDir);
+  const { Icon: StatusIcon, color, label } = getStatusIcon(file.index, file.workingDir);
+  const { Icon: TypeIcon, color: typeColor, label: typeLabel } = getFileIcon(file.path);
   return (
     <div
       className={cn(
-        'group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer',
+        'group flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer',
         isActive
           ? 'bg-accent-emphasis/20 text-text-primary'
           : 'hover:bg-bg-tertiary/30'
       )}
       onClick={onClick}
     >
-      <span title={label} className="flex-shrink-0"><Icon size={13} className={color} /></span>
+      <span title={label} className="flex-shrink-0"><StatusIcon size={13} className={color} /></span>
+      <span title={typeLabel} className="flex-shrink-0" style={{ color: typeColor }}><TypeIcon size={13} /></span>
       <span className="flex-1 truncate">{showFullPath ? file.path : fileName(file.path)}</span>
       {actions}
     </div>
@@ -257,14 +260,38 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
             Unstaged ({unstagedFiles.length})
           </div>
           {unstagedFiles.length > 0 && (
-            <button
-              onClick={() => stageAll()}
-              className="px-1.5 py-0.5 rounded border border-success/40 bg-success/15 text-success hover:bg-success/25 hover:border-success/60 flex items-center gap-1 transition-colors"
-              title="Stage all"
-            >
-              <Plus size={10} />
-              <span className="text-[0.6rem] font-medium">Stage All</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'Discard All Changes',
+                    message: `Are you sure you want to discard all ${unstagedFiles.length} unstaged change${unstagedFiles.length !== 1 ? 's' : ''}? This action cannot be undone.`,
+                    confirmLabel: 'Discard All',
+                    variant: 'danger',
+                  });
+                  if (!confirmed) return;
+                  selectFile(null);
+                  const tracked = unstagedFiles.filter(f => f.index !== '?').map(f => f.path);
+                  const untracked = unstagedFiles.filter(f => f.index === '?').map(f => f.path);
+                  if (tracked.length > 0) await api.discardChanges(repoPath, tracked);
+                  if (untracked.length > 0) await api.deleteUntrackedFiles(repoPath, untracked);
+                  await refresh();
+                }}
+                className="px-1.5 py-0.5 rounded border border-danger/40 bg-danger/15 text-danger hover:bg-danger/25 hover:border-danger/60 flex items-center gap-1 transition-colors"
+                title="Discard all changes"
+              >
+                <RotateCcw size={10} />
+                <span className="text-[0.6rem] font-medium">Discard All</span>
+              </button>
+              <button
+                onClick={() => stageAll()}
+                className="px-1.5 py-0.5 rounded border border-success/40 bg-success/15 text-success hover:bg-success/25 hover:border-success/60 flex items-center gap-1 transition-colors"
+                title="Stage all"
+              >
+                <Plus size={10} />
+                <span className="text-[0.6rem] font-medium">Stage All</span>
+              </button>
+            </div>
           )}
         </div>
         {unstagedOpen && (
