@@ -79,6 +79,9 @@ export interface RepoBookmark {
   lastOpened?: string;
   group?: string;
   avatar?: string; // base64 data URL for repo logo
+  runCommand?: string;   // e.g. "yarn serve", "npm run dev"
+  runPort?: number;      // fixed port for the dev server
+  buildCommand?: string; // e.g. "npm run build", "yarn build"
 }
 
 export interface Project {

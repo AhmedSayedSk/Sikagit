@@ -70,6 +70,18 @@ if (colNames.includes('icon')) {
   db.exec(`ALTER TABLE projects DROP COLUMN icon`);
 }
 
+// Migrate: add run_command column to repos if missing
+const repoCols = db.prepare("PRAGMA table_info(repos)").all() as { name: string }[];
+if (!repoCols.some(c => c.name === 'run_command')) {
+  db.exec(`ALTER TABLE repos ADD COLUMN run_command TEXT`);
+}
+if (!repoCols.some(c => c.name === 'run_port')) {
+  db.exec(`ALTER TABLE repos ADD COLUMN run_port INTEGER`);
+}
+if (!repoCols.some(c => c.name === 'build_command')) {
+  db.exec(`ALTER TABLE repos ADD COLUMN build_command TEXT`);
+}
+
 // One-time migration from JSON files
 const reposJsonPath = path.join(DATA_DIR, 'repos.json');
 const projectsJsonPath = path.join(DATA_DIR, 'projects.json');
@@ -130,14 +142,17 @@ function rowToRepo(row: any): RepoBookmark {
     lastOpened: row.last_opened ?? undefined,
     group: row.group ?? undefined,
     avatar: row.avatar || undefined,
+    runCommand: row.run_command || undefined,
+    runPort: row.run_port || undefined,
+    buildCommand: row.build_command || undefined,
   };
 }
 
 const stmtAllRepos = db.prepare('SELECT * FROM repos');
 const stmtRepoById = db.prepare('SELECT * FROM repos WHERE id = ?');
 const stmtInsertRepo = db.prepare(
-  `INSERT INTO repos (id, path, display_path, name, is_wsl, last_opened, "group", avatar)
-   VALUES (@id, @path, @displayPath, @name, @isWSL, @lastOpened, @group, @avatar)`
+  `INSERT INTO repos (id, path, display_path, name, is_wsl, last_opened, "group", avatar, run_command, run_port, build_command)
+   VALUES (@id, @path, @displayPath, @name, @isWSL, @lastOpened, @group, @avatar, @runCommand, @runPort, @buildCommand)`
 );
 const stmtDeleteRepo = db.prepare('DELETE FROM repos WHERE id = ?');
 
@@ -160,6 +175,9 @@ export function insertRepo(repo: RepoBookmark): void {
     lastOpened: repo.lastOpened ?? null,
     group: repo.group ?? null,
     avatar: repo.avatar ?? null,
+    runCommand: repo.runCommand ?? null,
+    runPort: repo.runPort ?? null,
+    buildCommand: repo.buildCommand ?? null,
   });
 }
 
@@ -173,6 +191,9 @@ export function updateRepo(id: string, data: Partial<RepoBookmark>): RepoBookmar
   if (data.name !== undefined) { sets.push('name = @name'); params.name = data.name; }
   if (data.group !== undefined) { sets.push('"group" = @group'); params.group = data.group; }
   if (data.avatar !== undefined) { sets.push('avatar = @avatar'); params.avatar = data.avatar; }
+  if (data.runCommand !== undefined) { sets.push('run_command = @runCommand'); params.runCommand = data.runCommand; }
+  if (data.runPort !== undefined) { sets.push('run_port = @runPort'); params.runPort = data.runPort; }
+  if (data.buildCommand !== undefined) { sets.push('build_command = @buildCommand'); params.buildCommand = data.buildCommand; }
   if (data.lastOpened !== undefined) { sets.push('last_opened = @lastOpened'); params.lastOpened = data.lastOpened; }
 
   if (sets.length === 0) return rowToRepo(existing);
