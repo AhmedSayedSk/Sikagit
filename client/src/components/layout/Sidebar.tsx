@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot } from 'lucide-react';
+import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot, Play } from 'lucide-react';
 import { getRepoIcon } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -9,18 +9,24 @@ import { AppSettingsDialog } from '../operations/AppSettingsDialog';
 import { ProjectDialog } from '../operations/ProjectDialog';
 import { useConfirmStore } from '../../store/confirmStore';
 import { useRepoStatusStore } from '../../store/repoStatusStore';
+import { useRunStore } from '../../store/runStore';
 import { cn } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
 
 function RepoStatusDot({ repoId }: { repoId: string }) {
   const summary = useRepoStatusStore(s => s.summaries[repoId]);
-  if (!summary) return null;
+  const isRunning = useRunStore(s => s.running[repoId]);
 
-  const { ahead, behind, hasChanges } = summary;
-  if (ahead === 0 && behind === 0 && !hasChanges) return null;
+  const { ahead = 0, behind = 0, hasChanges = false } = summary ?? {};
+  if (ahead === 0 && behind === 0 && !hasChanges && !isRunning) return null;
 
   return (
-    <span className="w-[30px] flex items-center justify-end gap-0.5 flex-shrink-0">
+    <span className="flex items-center justify-end gap-1.5 flex-shrink-0">
+      {isRunning && (
+        <span title="Command running" className="text-accent">
+          <Play size={9} strokeWidth={2.5} fill="currentColor" />
+        </span>
+      )}
       {ahead > 0 && (
         <span title={`${ahead} commit${ahead > 1 ? 's' : ''} ahead — push needed`} className="text-accent">
           <ArrowUp size={12} strokeWidth={2.5} />
@@ -42,24 +48,33 @@ function RepoStatusDot({ repoId }: { repoId: string }) {
 
 function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos: RepoBookmark[]; hidden?: boolean }) {
   const summaries = useRepoStatusStore(s => s.summaries);
+  const running = useRunStore(s => s.running);
   const projectRepoIds = project.repoIds.filter(id => repos.some(r => r.id === id));
 
   let totalAhead = 0;
   let totalBehind = 0;
   let anyChanges = false;
+  let anyRunning = false;
 
   for (const id of projectRepoIds) {
     const s = summaries[id];
-    if (!s) continue;
-    totalAhead += s.ahead;
-    totalBehind += s.behind;
-    if (s.hasChanges) anyChanges = true;
+    if (s) {
+      totalAhead += s.ahead;
+      totalBehind += s.behind;
+      if (s.hasChanges) anyChanges = true;
+    }
+    if (running[id]) anyRunning = true;
   }
 
-  if (hidden || (totalAhead === 0 && totalBehind === 0 && !anyChanges)) return null;
+  if (hidden || (totalAhead === 0 && totalBehind === 0 && !anyChanges && !anyRunning)) return null;
 
   return (
-    <span className="w-[30px] flex items-center justify-end gap-0.5 flex-shrink-0">
+    <span className="flex items-center justify-end gap-1.5 flex-shrink-0">
+      {anyRunning && (
+        <span title="Command running" className="text-accent">
+          <Play size={9} strokeWidth={2.5} fill="currentColor" />
+        </span>
+      )}
       {totalAhead > 0 && (
         <span title={`${totalAhead} commit${totalAhead > 1 ? 's' : ''} ahead — push needed`} className="text-accent">
           <ArrowUp size={12} strokeWidth={2.5} />
