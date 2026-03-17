@@ -31,6 +31,8 @@ export function RunOutput({ repoId, command, onClose }: RunOutputProps) {
   const isRunning = useRunStore(s => !!s.running[repoId]);
   const port = useRunStore(s => s.ports[repoId] ?? null);
   const runTarget = useRunStore(s => s.runTargets[repoId] ?? 'unknown');
+  const cpuPercent = useRunStore(s => s.stats[repoId]?.cpuPercent ?? 0);
+  const memMB = useRunStore(s => s.stats[repoId]?.memMB ?? 0);
   const stopRun = useRunStore(s => s.stopRun);
   const stopBuild = useRunStore(s => s.stopBuild);
   const clearRunOutput = useRunStore(s => s.clearOutput);
@@ -102,6 +104,17 @@ export function RunOutput({ repoId, command, onClose }: RunOutputProps) {
               <ExternalLink size={9} />
               :{port}
             </a>
+          </>
+        )}
+
+        {/* Process stats */}
+        {isRunning && (cpuPercent > 0 || memMB > 0) && (
+          <>
+            <span className="w-px h-3 bg-border" />
+            <span className="flex items-center gap-2.5 text-[0.65rem] font-mono">
+              <span title="CPU usage" className={cpuPercent > 80 ? 'text-danger' : cpuPercent > 40 ? 'text-warning' : 'text-success/70'}>CPU {cpuPercent}%</span>
+              <span title="Memory usage" className={memMB > 1024 ? 'text-danger' : memMB > 512 ? 'text-warning' : 'text-accent/70'}>RAM {memMB < 1024 ? `${memMB} MB` : `${(memMB / 1024).toFixed(1)} GB`}</span>
+            </span>
           </>
         )}
 
