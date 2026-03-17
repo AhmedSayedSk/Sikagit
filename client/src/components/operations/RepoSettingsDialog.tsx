@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, Play, GitBranch, FolderOpen } from 'lucide-react';
+import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, Play, GitBranch, FolderOpen, Upload, Trash2 } from 'lucide-react';
 import type { RepoBookmark } from '@sikagit/shared';
 import { useRepoStore } from '../../store/repoStore';
 import { useStatusStore } from '../../store/statusStore';
@@ -221,9 +221,57 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
                   />
                 </div>
 
-                {/* Icon */}
+                {/* Icon / Custom Image */}
                 <div>
-                  <label className="block text-xs text-text-secondary mb-1.5 font-medium">Repository Type</label>
+                  <label className="block text-xs text-text-secondary mb-1.5 font-medium">Icon</label>
+
+                  {/* Current custom image preview */}
+                  {selectedIcon.startsWith('data:') && (
+                    <div className="flex items-center gap-3 mb-3">
+                      <img src={selectedIcon} alt="" className="w-10 h-10 rounded-md border border-border object-contain bg-bg-primary" />
+                      <button
+                        type="button"
+                        onClick={() => setSelectedIcon('')}
+                        className="flex items-center gap-1 text-[0.65rem] text-danger hover:bg-danger/10 px-2 py-1 rounded transition-colors"
+                      >
+                        <Trash2 size={10} />
+                        Remove
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Upload custom image */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <label
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-dashed cursor-pointer transition-colors text-[0.65rem] font-medium',
+                        'border-border text-text-muted hover:text-text-primary hover:border-accent hover:bg-accent/5'
+                      )}
+                    >
+                      <Upload size={12} />
+                      Upload image
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 256 * 1024) return; // 256KB max
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (typeof reader.result === 'string') setSelectedIcon(reader.result);
+                          };
+                          reader.readAsDataURL(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    <span className="text-[0.55rem] text-text-muted">Max 256KB</span>
+                  </div>
+
+                  {/* Or pick an icon */}
+                  <p className="text-[0.6rem] text-text-muted mb-2">Or choose a type icon</p>
                   <div className="flex flex-wrap gap-1.5">
                     {REPO_ICONS.map(({ name: iconName, label, Icon }) => (
                       <button
