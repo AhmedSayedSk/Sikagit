@@ -341,6 +341,22 @@ export function MainContent() {
           </div>
         )}
 
+        {/* Platform badge */}
+        {status?.remoteUrl && (() => {
+          const url = status.remoteUrl!.toLowerCase();
+          const platform = url.includes('github.com') ? { name: 'GitHub', bg: 'bg-[#24292e]', text: 'text-[#f0f6fc]' }
+            : url.includes('dev.azure.com') || url.includes('visualstudio.com') ? { name: 'Azure', bg: 'bg-[#0078d4]/15', text: 'text-[#0078d4]' }
+            : url.includes('gitlab.com') || url.includes('gitlab') ? { name: 'GitLab', bg: 'bg-[#fc6d26]/15', text: 'text-[#fc6d26]' }
+            : url.includes('bitbucket.org') ? { name: 'Bitbucket', bg: 'bg-[#2684ff]/15', text: 'text-[#2684ff]' }
+            : url.includes('codeberg.org') ? { name: 'Codeberg', bg: 'bg-[#2185d0]/15', text: 'text-[#2185d0]' }
+            : null;
+          return platform ? (
+            <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[0.6rem] font-semibold tracking-wide', platform.bg, platform.text)}>
+              {platform.name}
+            </span>
+          ) : null;
+        })()}
+
         {/* Remote status text */}
         {status && (
           <>
