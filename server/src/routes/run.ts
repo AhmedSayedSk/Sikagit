@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
+import fs from 'fs';
 import * as db from '../services/db';
 import { io } from '../index';
 
@@ -22,6 +23,104 @@ function bufferOutput(repoId: string, line: string) {
     buf.splice(0, buf.length - MAX_BUFFER_LINES);
   }
 }
+
+// ─── Process stats (CPU + Memory) ───
+
+interface ProcStats {
+  cpuPercent: number;
+  memMB: number;
+}
+
+const NUM_CPUS = require('os').cpus().length;
+const CLK_TCK = 100; // Standard on Linux
+const prevCpu = new Map<string, { total: number; time: number }>();
+
+function getDescendantPids(pid: number): number[] {
+  // Read all /proc entries and find children recursively
+  const pids: number[] = [pid];
+  try {
+    const entries = fs.readdirSync('/proc').filter(e => /^\d+$/.test(e));
+    const ppidMap = new Map<number, number[]>();
+    for (const e of entries) {
+      try {
+        const stat = fs.readFileSync(`/proc/${e}/stat`, 'utf8');
+        const parts = stat.split(') ');
+        if (parts.length < 2) continue;
+        const fields = parts[1].split(' ');
+        const ppid = parseInt(fields[1], 10);
+        const p = parseInt(e, 10);
+        if (!ppidMap.has(ppid)) ppidMap.set(ppid, []);
+        ppidMap.get(ppid)!.push(p);
+      } catch { /* process gone */ }
+    }
+    // BFS to find all descendants
+    const queue = [pid];
+    while (queue.length > 0) {
+      const p = queue.shift()!;
+      const children = ppidMap.get(p) || [];
+      for (const c of children) {
+        pids.push(c);
+        queue.push(c);
+      }
+    }
+  } catch { /* ignore */ }
+  return pids;
+}
+
+function readProcStats(key: string, pid: number): ProcStats | null {
+  try {
+    const pids = getDescendantPids(pid);
+    let totalUtime = 0;
+    let totalStime = 0;
+    let totalRss = 0;
+
+    for (const p of pids) {
+      try {
+        const stat = fs.readFileSync(`/proc/${p}/stat`, 'utf8');
+        const parts = stat.split(') ');
+        if (parts.length < 2) continue;
+        const fields = parts[1].split(' ');
+        totalUtime += parseInt(fields[11], 10); // utime
+        totalStime += parseInt(fields[12], 10); // stime
+        totalRss += parseInt(fields[21], 10);   // rss in pages
+      } catch { /* process gone */ }
+    }
+
+    const totalCpuTicks = totalUtime + totalStime;
+    const now = Date.now();
+    const prev = prevCpu.get(key);
+    let cpuPercent = 0;
+
+    if (prev) {
+      const dtSec = (now - prev.time) / 1000;
+      if (dtSec > 0) {
+        const dTicks = totalCpuTicks - prev.total;
+        cpuPercent = (dTicks / CLK_TCK / dtSec / NUM_CPUS) * 100;
+        cpuPercent = Math.min(Math.max(cpuPercent, 0), 100 * NUM_CPUS);
+      }
+    }
+
+    prevCpu.set(key, { total: totalCpuTicks, time: now });
+
+    const pageSize = 4096;
+    const memMB = (totalRss * pageSize) / (1024 * 1024);
+
+    return { cpuPercent: Math.round(cpuPercent * 10) / 10, memMB: Math.round(memMB * 10) / 10 };
+  } catch {
+    return null;
+  }
+}
+
+// Poll stats every 2 seconds for all active processes
+setInterval(() => {
+  for (const [key, child] of activeProcesses) {
+    if (!child.pid) continue;
+    const stats = readProcStats(key, child.pid);
+    if (stats) {
+      io.emit(`run:stats:${key}`, stats);
+    }
+  }
+}, 2000);
 
 // Strip non-color ANSI sequences (cursor movement, erase, etc.) but keep SGR color codes
 // eslint-disable-next-line no-control-regex
@@ -216,6 +315,7 @@ router.post('/:id/start', (req: Request, res: Response) => {
   child.on('exit', (code) => {
     clearOutputState(repo.id);
     detectedPorts.delete(repo.id);
+    prevCpu.delete(repo.id);
     activeProcesses.delete(repo.id);
     io.emit(`run:exit:${repo.id}`, code ?? 1);
   });
@@ -223,6 +323,7 @@ router.post('/:id/start', (req: Request, res: Response) => {
   child.on('error', (err) => {
     clearOutputState(repo.id);
     detectedPorts.delete(repo.id);
+    prevCpu.delete(repo.id);
     activeProcesses.delete(repo.id);
     bufferOutput(repo.id, `Error: ${err.message}\n`);
     io.emit(`run:output:${repo.id}`, `Error: ${err.message}\n`);
@@ -308,12 +409,14 @@ router.post('/:id/build', (req: Request, res: Response) => {
 
   child.on('exit', (code) => {
     clearOutputState(bk);
+    prevCpu.delete(bk);
     activeProcesses.delete(bk);
     io.emit(`run:exit:${bk}`, code ?? 1);
   });
 
   child.on('error', (err) => {
     clearOutputState(bk);
+    prevCpu.delete(bk);
     activeProcesses.delete(bk);
     bufferOutput(bk, `Error: ${err.message}\n`);
     io.emit(`run:output:${bk}`, `Error: ${err.message}\n`);

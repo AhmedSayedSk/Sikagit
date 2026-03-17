@@ -4,11 +4,17 @@ import { getSocket } from '../lib/socket';
 import { useToastStore } from './toastStore';
 import { playSuccess, playError } from '../lib/sound';
 
+interface ProcStats {
+  cpuPercent: number;
+  memMB: number;
+}
+
 interface RunState {
   outputs: Record<string, string[]>;
   running: Record<string, boolean>;
   ports: Record<string, number | null>;
   runTargets: Record<string, string>;
+  stats: Record<string, ProcStats>;
   startRun: (repoId: string) => Promise<void>;
   stopRun: (repoId: string) => Promise<void>;
   checkStatus: (repoId: string) => Promise<void>;
@@ -44,10 +50,17 @@ function subscribeToKey(key: string) {
     }));
   });
 
+  socket.on(`run:stats:${key}`, (data: ProcStats) => {
+    useRunStore.setState((state) => ({
+      stats: { ...state.stats, [key]: data },
+    }));
+  });
+
   socket.on(`run:exit:${key}`, (code: number) => {
     useRunStore.setState((state) => ({
       running: { ...state.running, [key]: false },
       ports: { ...state.ports, [key]: null },
+      stats: { ...state.stats, [key]: { cpuPercent: 0, memMB: 0 } },
       outputs: {
         ...state.outputs,
         [key]: [...(state.outputs[key] || []), `\n--- Process exited with code ${code} ---\n`],
@@ -75,6 +88,7 @@ export const useRunStore = create<RunState>()((set) => ({
   running: {},
   ports: {},
   runTargets: {},
+  stats: {},
 
   startRun: async (repoId: string) => {
     subscribeToKey(repoId);
