@@ -36,9 +36,13 @@ export const REPO_ICONS: RepoIconEntry[] = [
 const ICON_MAP = new Map(REPO_ICONS.map(e => [e.name, e]));
 
 export function getRepoIcon(iconName?: string): { Icon: LucideIcon; label: string } {
-  if (iconName) {
+  if (iconName && !iconName.startsWith('data:')) {
     const entry = ICON_MAP.get(iconName);
     if (entry) return { Icon: entry.Icon, label: entry.label };
   }
   return { Icon: GitBranch, label: 'Repository' };
+}
+
+export function isCustomImage(avatar?: string): boolean {
+  return !!avatar && avatar.startsWith('data:');
 }

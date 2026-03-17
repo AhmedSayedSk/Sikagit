@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot, Play } from 'lucide-react';
-import { getRepoIcon } from '../../lib/repoIcons';
+import { getRepoIcon, isCustomImage } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -140,6 +140,7 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
   onSelectRepo: (id: string) => void;
   onReorderRepos: (repoIds: string[]) => void;
 }) {
+  const fontSize = useUIStore(s => s.fontSize);
   const [dragState, setDragState] = useState<{
     fromIdx: number;
     toIdx: number;
@@ -316,9 +317,9 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
                   )}
                   onPointerDown={e => handlePointerDown(e, idx)}
                 >
-                  {(() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
+                  {isCustomImage(repo.avatar) ? <img src={repo.avatar} alt="" className="w-3 h-3 rounded-sm object-contain flex-shrink-0" /> : (() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
                   <div className="flex-1 min-w-0">
-                    <div className="truncate font-medium">{repo.name}</div>
+                    <div className="truncate font-medium" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
                   </div>
                   <RepoStatusDot repoId={repo.id} />
                 </div>
@@ -405,6 +406,7 @@ function RepoItem({ repo, isActive, onSelect }: {
   isActive: boolean;
   onSelect: () => void;
 }) {
+  const fontSize = useUIStore(s => s.fontSize);
   return (
     <div
       className={cn(
@@ -415,9 +417,9 @@ function RepoItem({ repo, isActive, onSelect }: {
       )}
       onClick={onSelect}
     >
-      {(() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
+      {isCustomImage(repo.avatar) ? <img src={repo.avatar} alt="" className="w-3 h-3 rounded-sm object-contain flex-shrink-0" /> : (() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
       <div className="flex-1 min-w-0">
-        <div className="truncate font-medium">{repo.name}</div>
+        <div className="truncate font-medium" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
       </div>
       <RepoStatusDot repoId={repo.id} />
     </div>
