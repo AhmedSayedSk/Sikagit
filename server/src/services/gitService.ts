@@ -99,14 +99,12 @@ export async function getStatus(repoPath: string): Promise<GitStatus> {
 
   const files = status.files.map(mapFile);
 
-  // Check if a remote 'origin' exists even if no upstream is set
+  // Get remote URL for platform detection
   let remoteUrl: string | null = null;
-  if (!status.tracking) {
-    try {
-      const url = (await git.raw(['remote', 'get-url', 'origin'])).trim();
-      if (url) remoteUrl = url;
-    } catch { /* no remote */ }
-  }
+  try {
+    const url = (await git.raw(['remote', 'get-url', 'origin'])).trim();
+    if (url) remoteUrl = url;
+  } catch { /* no remote */ }
 
   return {
     current: status.current,
