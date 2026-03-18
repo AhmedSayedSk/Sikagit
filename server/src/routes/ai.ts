@@ -70,12 +70,11 @@ router.post('/smart-commit/execute', asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  const allFiles = groups.flatMap((g: any) => g.files);
   const commits: { hash: string; message: string }[] = [];
 
   await withRepoLock(repoPath, async () => {
-    // Unstage everything first
-    await gitService.unstageFiles(repoPath, allFiles);
+    // Unstage ALL staged files first to ensure only group files get committed
+    await gitService.unstageAll(repoPath);
 
     for (const group of groups) {
       // Stage only this group's files
