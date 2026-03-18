@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="client/public/sikagit-logo.svg" alt="SikaGit" width="48" height="48" />
+  <img src="client/public/logo-128.png" alt="SikaGit" width="64" height="64" />
 </p>
 
 <h1 align="center">SikaGit</h1>
