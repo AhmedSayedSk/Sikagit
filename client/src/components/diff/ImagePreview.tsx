@@ -2,9 +2,24 @@ import { Image as ImageIcon } from 'lucide-react';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp']);
 
+const BINARY_EXTENSIONS = new Set([
+  'mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv',   // video
+  'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a',           // audio
+  'zip', 'tar', 'gz', 'rar', '7z', 'bz2',              // archives
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',  // documents
+  'ttf', 'otf', 'woff', 'woff2', 'eot',                 // fonts
+  'exe', 'dll', 'so', 'dylib', 'bin',                   // binaries
+  'sqlite', 'db',                                        // databases
+]);
+
 export function isImageFile(filePath: string): boolean {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   return IMAGE_EXTENSIONS.has(ext);
+}
+
+export function isBinaryFile(filePath: string): boolean {
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  return BINARY_EXTENSIONS.has(ext);
 }
 
 function buildFileUrl(repoPath: string, filePath: string, commit?: string): string {
