@@ -3,10 +3,13 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLogStore } from '../../store/logStore';
 import { useStatusStore } from '../../store/statusStore';
 import { useUIStore } from '../../store/uiStore';
+import { useConfirmStore } from '../../store/confirmStore';
+import { useToastStore } from '../../store/toastStore';
+import { api } from '../../lib/api';
 import { CommitRow } from './CommitRow';
 import { CommitGraph, getGraphWidth, UncommittedNode } from '../graph/CommitGraph';
 import { ColumnResizeHandle } from '../ui/ColumnResizeHandle';
-import { cn } from '../../lib/utils';
+import { cn, truncateHash } from '../../lib/utils';
 
 interface CommitListProps {
   repoPath: string;
@@ -16,7 +19,7 @@ const ROW_HEIGHT = 28;
 
 export function CommitList({ repoPath }: CommitListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const { commits, totalLanes, loading, hasMore, loadMore, selectedCommit, selectCommit } = useLogStore();
+  const { commits, totalLanes, loading, hasMore, loadMore, fetchLog, selectedCommit, selectCommit } = useLogStore();
   const { status, selectFile } = useStatusStore();
   const {
     colGraphWidth, setColGraphWidth,
@@ -25,6 +28,9 @@ export function CommitList({ repoPath }: CommitListProps) {
     colDateWidth, setColDateWidth,
     colHashWidth, setColHashWidth,
   } = useUIStore();
+  const confirm = useConfirmStore(s => s.confirm);
+  const addToast = useToastStore(s => s.addToast);
+  const fetchStatus = useStatusStore(s => s.fetchStatus);
   const [scrollTop, setScrollTop] = useState(0);
 
   const hasUncommitted = status && (
@@ -160,6 +166,25 @@ export function CommitList({ repoPath }: CommitListProps) {
                   const newHash = selectedCommit === hash ? null : hash;
                   selectCommit(newHash);
                   if (newHash) selectFile(null);
+                }}
+                onDoubleClick={async () => {
+                  const commit = commits[virtualItem.index];
+                  if (commit.isHead) return;
+                  const confirmed = await confirm({
+                    title: 'Checkout Commit',
+                    message: `Move the current branch to commit ${truncateHash(commit.hash)}?\n\n"${commit.message}"\n\nThis will reset your branch to this commit. You can then force push to update the remote.`,
+                    confirmLabel: 'Checkout',
+                    variant: 'warning',
+                  });
+                  if (!confirmed) return;
+                  try {
+                    const { branch } = await api.checkout(repoPath, commit.hash);
+                    addToast('success', `Moved ${branch} to ${truncateHash(commit.hash)} — use Force Push to update remote`);
+                    await fetchStatus(repoPath);
+                    await fetchLog(repoPath);
+                  } catch (err: any) {
+                    addToast('error', err.message);
+                  }
                 }}
               />
             </div>

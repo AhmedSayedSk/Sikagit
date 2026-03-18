@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { X, Copy, Check, GitCommitHorizontal, User, Calendar, GitFork, Undo2, Loader2, Upload } from 'lucide-react';
+import { X, Copy, Check, GitCommitHorizontal, User, Calendar, GitFork, Undo2, Loader2, Upload, RotateCcw } from 'lucide-react';
 import { useLogStore } from '../../store/logStore';
 import { useStatusStore } from '../../store/statusStore';
 import { useToastStore } from '../../store/toastStore';
@@ -22,6 +22,7 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   const [copied, setCopied] = useState(false);
   const [uncommitting, setUncommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
   const status = useStatusStore(s => s.status);
   const [scrollY, setScrollY] = useState(0);
   const collapseRef = useRef<HTMLDivElement>(null);
@@ -140,6 +141,27 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
     }
   };
 
+  const handleCheckout = async () => {
+    const confirmed = await confirm({
+      title: 'Checkout Commit',
+      message: `Move the current branch to commit ${truncateHash(commit.hash)}?\n\n"${commit.message}"\n\nThis will reset your branch to this commit. You can then force push to update the remote.`,
+      confirmLabel: 'Checkout',
+      variant: 'warning',
+    });
+    if (!confirmed) return;
+    setCheckingOut(true);
+    try {
+      const { branch } = await api.checkout(repoPath, commit.hash);
+      addToast('success', `Moved ${branch} to ${truncateHash(commit.hash)} — use Force Push to update remote`);
+      await fetchStatus(repoPath);
+      await fetchLog(repoPath);
+    } catch (err: any) {
+      addToast('error', err.message);
+    } finally {
+      setCheckingOut(false);
+    }
+  };
+
   const hasBody = commit.body && commit.body.trim();
 
   // Collapse progress: 0 = fully expanded, 1 = fully collapsed
@@ -210,8 +232,18 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
                 <span className="font-mono text-text-muted">{commit.parentHashes.map(h => truncateHash(h)).join(', ')}</span>
               </span>
             )}
-            {(isHead || isUnpushed) && (
+            {(isHead || isUnpushed || !commit.isHead) && (
               <span className="inline-flex items-center gap-1.5 ml-auto">
+                {!commit.isHead && (
+                  <button
+                    onClick={handleCheckout}
+                    disabled={checkingOut}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-bg-tertiary text-text-secondary border border-border hover:bg-bg-tertiary/80 hover:text-text-primary disabled:opacity-40 transition-colors"
+                  >
+                    {checkingOut ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                    Checkout
+                  </button>
+                )}
                 {isUnpushed && (
                   <button
                     onClick={handlePushToHere}
