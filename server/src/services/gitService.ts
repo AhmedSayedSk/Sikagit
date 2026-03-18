@@ -397,6 +397,11 @@ export async function unstageFiles(repoPath: string, files: string[]): Promise<v
   await git.reset(['HEAD', '--', ...files]);
 }
 
+export async function unstageAll(repoPath: string): Promise<void> {
+  const git = getGit(repoPath);
+  await git.reset(['HEAD']);
+}
+
 export async function commit(repoPath: string, message: string, amend = false): Promise<string> {
   const author = await getAuthorIdentity(repoPath);
 
