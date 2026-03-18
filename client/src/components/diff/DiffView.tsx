@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { FileCode, ChevronRight, ChevronDown, Image as ImageIcon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
-import { isImageFile } from './ImagePreview';
+import { isImageFile, isBinaryFile } from './ImagePreview';
 
 interface DiffViewProps {
   diff: string;
@@ -271,8 +271,15 @@ function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, 
         </span>
       </div>
 
+      {/* Binary file notice */}
+      {expanded && isBinaryFile(file.path) && (
+        <div className="flex items-center justify-center py-6 text-text-muted text-xs">
+          Binary file — preview not available
+        </div>
+      )}
+
       {/* Image preview for image files */}
-      {expanded && isImageFile(file.path) && repoPath && (
+      {expanded && !isBinaryFile(file.path) && isImageFile(file.path) && repoPath && (
         <div className="flex items-center gap-6 p-4 justify-center flex-wrap">
           {commit && (
             <div className="flex flex-col items-center gap-1.5">

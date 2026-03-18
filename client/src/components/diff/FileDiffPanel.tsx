@@ -4,7 +4,7 @@ import { useStatusStore } from '../../store/statusStore';
 import { useConfirmStore } from '../../store/confirmStore';
 import { api } from '../../lib/api';
 import { DiffView } from './DiffView';
-import { ImagePreview, isImageFile } from './ImagePreview';
+import { ImagePreview, isImageFile, isBinaryFile } from './ImagePreview';
 
 interface FileDiffPanelProps {
   repoPath: string;
@@ -124,6 +124,10 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
         {loading ? (
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
             Loading diff...
+          </div>
+        ) : isBinaryFile(selectedFile) ? (
+          <div className="flex items-center justify-center h-full text-text-muted text-sm">
+            Binary file — preview not available
           </div>
         ) : isImageFile(selectedFile) ? (
           <ImagePreview repoPath={repoPath} filePath={selectedFile} />
