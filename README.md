@@ -1,12 +1,13 @@
 <p align="center">
-  <img src="client/public/logo-128.png" alt="SikaGit" width="64" height="64" />
+  <img src="client/public/logo-128.png" alt="SikaGit — Self-Hosted Git GUI Client" width="64" height="64" />
 </p>
 
-<h1 align="center">SikaGit</h1>
+<h1 align="center">SikaGit — Self-Hosted Git GUI for Developers</h1>
 
 <p align="center">
-  A modern, self-hosted Git GUI client built with React and Node.js.<br/>
-  Run it locally via Docker and manage your repositories from a clean, dark-themed browser interface.
+  <strong>The open-source, self-hosted Git GUI client you run in Docker.</strong><br/>
+  Visual commit graph, inline diff viewer, hunk-level staging, built-in terminal, AI commit messages — all from your browser.<br/>
+  A free alternative to GitKraken, Sourcetree, and GitHub Desktop that runs on your own machine.
 </p>
 
 <p align="center">
@@ -16,6 +17,22 @@
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/License-Source%20Available-blue?style=flat-square" alt="License" />
 </p>
+
+---
+
+## Why SikaGit?
+
+| | GitKraken | Sourcetree | GitHub Desktop | **SikaGit** |
+|:--|:----------|:-----------|:---------------|:------------|
+| Self-hosted | No | No | No | **Yes** |
+| Runs in Docker | No | No | No | **Yes** |
+| Visual commit graph | Yes | Yes | No | **Yes** |
+| Hunk-level staging | Yes | Yes | No | **Yes** |
+| Built-in terminal | No | No | No | **Yes** |
+| AI commit messages | No | No | No | **Yes** |
+| Run dev servers | No | No | No | **Yes** |
+| Free for personal use | Limited | Yes | Yes | **Yes** |
+| Open source | No | No | Partial | **Yes** |
 
 ---
 
@@ -50,7 +67,7 @@ npm run dev
 
 ---
 
-## Features
+## Features — What Can SikaGit Do?
 
 ### Git Operations
 - **Visual Commit Graph** — Lane-based rendering with color-coded branches, merge curves, and uncommitted changes
@@ -74,7 +91,7 @@ npm run dev
 
 ---
 
-## Ports
+## Ports & Networking
 
 | Service | Port | Description |
 |:--------|:-----|:------------|
@@ -98,7 +115,7 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 
 ---
 
-## Configuration
+## Configuration & Environment Variables
 
 | Variable | Default | Description |
 |:---------|:--------|:------------|
@@ -111,7 +128,7 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 
 ---
 
-## Usage
+## Usage — How to Use SikaGit
 
 <details>
 <summary><strong>Adding a Repository</strong></summary>
@@ -302,6 +319,12 @@ npm run docker:logs          # Tail logs
 SikaGit is released under the [Sikasio Source Available License](LICENSE).
 Free for personal use. Commercial use requires a license from [Sikasio](https://sikasio.com).
 
+---
+
+## Keywords
+
+`git gui` · `git client` · `self-hosted git` · `docker git gui` · `visual commit graph` · `diff viewer` · `git staging tool` · `gitkraken alternative` · `sourcetree alternative` · `github desktop alternative` · `open source git gui` · `react git client` · `node.js git gui` · `wsl git gui` · `ai commit messages` · `git branch visualization` · `hunk staging` · `dev server manager` · `docker developer tools`
+
 <p align="center">
-  Built by <a href="https://sikasio.com"><strong>Sikasio</strong></a>
+  Built by <a href="https://sikasio.com"><strong>Sikasio</strong></a> — A design & development studio from Cairo, Egypt.
 </p>
