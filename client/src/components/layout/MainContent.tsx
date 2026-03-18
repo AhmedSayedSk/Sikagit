@@ -146,29 +146,32 @@ export function MainContent() {
     doPull(repo.path);
   }, [repo, remoteAction, doPull]);
 
-  const handlePush = useCallback(async () => {
+  const handlePush = useCallback(async (force = false) => {
     if (!repo || remoteAction) return;
     const ahead = status?.ahead ?? 0;
+    const behind = status?.behind ?? 0;
     const confirmed = await confirm({
-      title: 'Push to Remote',
-      message: ahead > 0
-        ? `Push ${ahead} commit${ahead !== 1 ? 's' : ''} to remote?`
-        : 'Push to remote?',
-      confirmLabel: 'Push',
-      variant: 'info',
+      title: force ? 'Force Push to Remote' : 'Push to Remote',
+      message: force
+        ? `Force push will overwrite the remote branch. This cannot be undone.\n\n${behind > 0 ? `The remote is ${behind} commit${behind !== 1 ? 's' : ''} ahead — these will be lost.` : 'Are you sure?'}`
+        : ahead > 0
+          ? `Push ${ahead} commit${ahead !== 1 ? 's' : ''} to remote?`
+          : 'Push to remote?',
+      confirmLabel: force ? 'Force Push' : 'Push',
+      variant: force ? 'danger' : 'info',
     });
     if (!confirmed) return;
     setRemoteAction('push');
     try {
       const setUpstream = !status?.tracking;
-      const result = await api.gitPush(repo.path, setUpstream);
+      const result = await api.gitPush(repo.path, setUpstream, undefined, force);
       refreshAfterRemote();
-      addToast('success', result.message || 'Pushed to remote');
+      addToast('success', result.message || (force ? 'Force pushed to remote' : 'Pushed to remote'));
     } catch (err: any) {
       addToast('error', err.message || 'Push failed');
     }
     setRemoteAction(null);
-  }, [repo, remoteAction, status?.tracking, status?.ahead, refreshAfterRemote, addToast, confirm]);
+  }, [repo, remoteAction, status?.tracking, status?.ahead, status?.behind, refreshAfterRemote, addToast, confirm]);
 
   if (!repo) {
     return (
@@ -323,10 +326,13 @@ export function MainContent() {
               )}
             </button>
             <button
-              onClick={handlePush}
+              onClick={() => handlePush(false)}
               disabled={!!remoteAction}
               className={cn(
                 'flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary transition-colors disabled:opacity-40 text-[0.7rem]',
+                status.behind > 0 && status.ahead === 0
+                  ? 'border-r border-border'
+                  : '',
                 status.ahead > 0
                   ? 'text-accent hover:bg-accent/10'
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
@@ -338,6 +344,17 @@ export function MainContent() {
                 <span className="ml-0.5 px-1.5 py-px rounded-full bg-accent/15 text-accent text-[0.6rem] font-semibold font-mono leading-none">{status.ahead}</span>
               )}
             </button>
+            {status.behind > 0 && (
+              <button
+                onClick={() => handlePush(true)}
+                disabled={!!remoteAction}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary text-danger hover:bg-danger/10 transition-colors disabled:opacity-40 text-[0.7rem]"
+                title="Force push — overwrites remote branch"
+              >
+                <ArrowUp size={12} />
+                <span>Force</span>
+              </button>
+            )}
           </div>
         )}
 

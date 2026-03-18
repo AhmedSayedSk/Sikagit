@@ -100,6 +100,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo, hash }),
   }),
+  checkout: (repo: string, hash: string) => request<{ branch: string }>('/git/checkout', {
+    method: 'POST',
+    body: JSON.stringify({ repo, hash }),
+  }),
   discardChanges: (repo: string, files: string[]) => request<void>('/git/discard', {
     method: 'POST',
     body: JSON.stringify({ repo, files }),
@@ -131,9 +135,9 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo, strategy }),
   }),
-  gitPush: (repo: string, setUpstream?: boolean, upToCommit?: string) => request<{ message: string }>('/git/push', {
+  gitPush: (repo: string, setUpstream?: boolean, upToCommit?: string, force?: boolean) => request<{ message: string }>('/git/push', {
     method: 'POST',
-    body: JSON.stringify({ repo, setUpstream, upToCommit }),
+    body: JSON.stringify({ repo, setUpstream, upToCommit, force }),
   }),
 
   // AI
