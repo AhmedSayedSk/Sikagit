@@ -17,11 +17,7 @@
   <img src="https://img.shields.io/badge/License-Source%20Available-blue?style=flat-square" alt="License" />
 </p>
 
-<br/>
-
 ---
-
-<br/>
 
 ## Getting Started
 
@@ -52,20 +48,11 @@ npm install
 npm run dev
 ```
 
-<br/>
-
 ---
-
-<br/>
 
 ## Features
 
-<table>
-<tr>
-<td width="50%" valign="top">
-
 ### Git Operations
-
 - **Visual Commit Graph** — Lane-based rendering with color-coded branches, merge curves, and uncommitted changes
 - **Inline Diff Viewer** — Syntax-highlighted diffs with hunk-level staging and discarding
 - **File Staging** — Staged/unstaged panels with folder grouping and bulk actions
@@ -73,32 +60,19 @@ npm run dev
 - **Branch & Tag Support** — Inline branch/tag labels with automatic remote default branch detection
 - **Remote Operations** — Push, pull (merge or rebase), fetch, and remote URL configuration
 
-</td>
-<td width="50%" valign="top">
-
 ### Project Management
-
 - **Multi-Repo Organization** — Group repositories under projects with collapsible tree navigation
 - **Run & Build** — Execute dev servers and builds with real-time terminal streaming
 - **Process Monitoring** — Live CPU/memory stats, port auto-detection, and lifecycle management
 - **AI Commits** — Generate commit messages and smart commit grouping from staged changes
 
 ### Developer Experience
-
 - **HMR in Docker** — Polling-based file watching for Next.js, Vite, CRA, Angular
 - **Binary Detection** — Prevents diff viewer freeze on video, audio, and archive files
 - **WSL Compatible** — Seamless Windows Subsystem for Linux path handling
 - **Clickable URLs** — Ctrl+Click terminal links to open in browser
 
-</td>
-</tr>
-</table>
-
-<br/>
-
 ---
-
-<br/>
 
 ## Ports
 
@@ -109,8 +83,6 @@ npm run dev
 
 <details>
 <summary><strong>Reserved Dev Server Ports</strong></summary>
-
-<br/>
 
 The following ports are mapped through Docker so dev servers started by SikaGit are accessible from your host browser:
 
@@ -124,11 +96,7 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 
 </details>
 
-<br/>
-
 ---
-
-<br/>
 
 ## Configuration
 
@@ -141,18 +109,12 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 | `GIT_SSH_COMMAND` | `ssh -o StrictHostKeyChecking=no` | SSH config for remotes |
 | `AZURE_DEVOPS_PAT` | — | Azure DevOps token (optional) |
 
-<br/>
-
 ---
-
-<br/>
 
 ## Usage
 
 <details>
 <summary><strong>Adding a Repository</strong></summary>
-
-<br/>
 
 1. Click **+** in the sidebar
 2. Browse to your repository folder or paste the path
@@ -163,8 +125,6 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 <details>
 <summary><strong>Organizing with Projects</strong></summary>
 
-<br/>
-
 1. Click **New Project** in the sidebar
 2. Name your project and select repositories to include
 3. Repos are grouped under the project with a collapsible view
@@ -173,8 +133,6 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 
 <details>
 <summary><strong>Committing Changes</strong></summary>
-
-<br/>
 
 1. Select a repository from the sidebar
 2. Review changed files in the **Unstaged** panel
@@ -187,8 +145,6 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 <details>
 <summary><strong>Running Dev Servers</strong></summary>
 
-<br/>
-
 1. Open repo settings and set a **Run Command** (e.g., `npx next dev`)
 2. Optionally set a fixed **Port** to avoid conflicts
 3. Click **Play** — terminal output streams in real-time
@@ -200,8 +156,6 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 <details>
 <summary><strong>Remote Operations</strong></summary>
 
-<br/>
-
 1. Configure the remote URL in repository settings
 2. Use **Push**, **Pull**, or **Fetch** from the toolbar
 3. Pull supports both merge and rebase strategies
@@ -209,11 +163,7 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 
 </details>
 
-<br/>
-
 ---
-
-<br/>
 
 ## Tech Stack
 
@@ -225,11 +175,7 @@ Infra       Docker  ·  Docker Compose  ·  npm Workspaces
 Language    TypeScript 5.9 (shared types across client & server)
 ```
 
-<br/>
-
 ---
-
-<br/>
 
 ## Project Structure
 
@@ -259,16 +205,10 @@ sikagit/
 └── docker-compose.prod.yml  Production
 ```
 
-<br/>
-
 ---
-
-<br/>
 
 <details>
 <summary><strong>API Reference</strong></summary>
-
-<br/>
 
 ### Repositories
 
@@ -333,12 +273,8 @@ sikagit/
 
 </details>
 
-<br/>
-
 <details>
 <summary><strong>Scripts</strong></summary>
-
-<br/>
 
 ```bash
 # Development
@@ -359,18 +295,12 @@ npm run docker:logs          # Tail logs
 
 </details>
 
-<br/>
-
 ---
-
-<br/>
 
 ## License
 
 SikaGit is released under the [Sikasio Source Available License](LICENSE).
 Free for personal use. Commercial use requires a license from [Sikasio](https://sikasio.com).
-
-<br/>
 
 <p align="center">
   Built by <a href="https://sikasio.com"><strong>Sikasio</strong></a>
