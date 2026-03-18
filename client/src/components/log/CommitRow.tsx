@@ -1,3 +1,4 @@
+import { useRef, useCallback } from 'react';
 import type { GraphCommit } from '@sikagit/shared';
 import { cn, formatDate, truncateHash, detectCommitType } from '../../lib/utils';
 
@@ -7,9 +8,27 @@ interface CommitRowProps {
   columnWidths: { type: number; author: number; date: number; hash: number };
   isSelected: boolean;
   onClick: () => void;
+  onDoubleClick?: () => void;
 }
 
-export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClick }: CommitRowProps) {
+export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClick, onDoubleClick }: CommitRowProps) {
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleClick = useCallback(() => {
+    if (clickTimer.current) {
+      // Double click detected — cancel the pending single click
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+      onDoubleClick?.();
+    } else {
+      // Delay single click to see if a double click follows
+      clickTimer.current = setTimeout(() => {
+        clickTimer.current = null;
+        onClick();
+      }, 220);
+    }
+  }, [onClick, onDoubleClick]);
+
   return (
     <div
       className={cn(
@@ -18,7 +37,7 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
           ? 'bg-accent-emphasis/20 text-text-primary'
           : 'hover:bg-bg-tertiary/50 text-text-secondary'
       )}
-      onClick={onClick}
+      onClick={handleClick}
     >
       {/* Graph space — the SVG is rendered behind this as an absolute layer */}
       <span style={{ width: graphWidth }} className="flex-shrink-0" />
