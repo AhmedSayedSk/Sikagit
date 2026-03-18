@@ -36,8 +36,21 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
     let lane = activeLanes.indexOf(commit.hash);
 
     if (lane === -1) {
-      // Not expected on any lane — new branch, assign to first free lane
-      lane = getFreeLane(activeLanes);
+      // Not expected on any lane — could be an orphaned reflog commit.
+      // Check if any of this commit's parents are already expected on a lane.
+      // If so, reuse that lane to keep the graph linear.
+      const parentOnLane = commit.parentHashes
+        .map(ph => activeLanes.indexOf(ph))
+        .find(idx => idx !== -1);
+
+      if (parentOnLane !== undefined && parentOnLane !== -1) {
+        // Insert before the parent on the same lane
+        lane = parentOnLane;
+        // The lane was waiting for our parent; now it should wait for us first
+        // (we'll set it to our parent below in the parent processing)
+      } else {
+        lane = getFreeLane(activeLanes);
+      }
     }
 
     // Claim this lane

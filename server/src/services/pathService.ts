@@ -105,7 +105,13 @@ export function validateGitRepo(repoPath: string): { valid: boolean; error?: str
   try {
     fs.statSync(gitPath);
   } catch {
-    return { valid: false, error: 'Not a git repository (no .git found)' };
+    // No .git found — auto-initialize
+    try {
+      const { execSync } = require('child_process');
+      execSync('git init', { cwd: normalized, stdio: 'ignore' });
+    } catch {
+      return { valid: false, error: 'Directory is not a git repository and could not be initialized' };
+    }
   }
 
   return { valid: true };
