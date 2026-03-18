@@ -314,6 +314,17 @@ npm run docker:logs          # Tail logs
 
 ---
 
+## Contributing
+
+We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a pull request.
+
+- [Report a Bug](https://github.com/AhmedSayedSk/sikagit/issues/new?template=bug_report.md)
+- [Request a Feature](https://github.com/AhmedSayedSk/sikagit/issues/new?template=feature_request.md)
+- [Read the Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+
+---
+
 ## License
 
 SikaGit is released under the [Sikasio Source Available License](LICENSE).
