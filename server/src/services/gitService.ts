@@ -213,6 +213,9 @@ export async function getLogWithParents(
   try {
     result = await git.raw([
       'log',
+      '--all',
+      '--reflog',
+      '--date-order',
       `--max-count=${limit}`,
       `--skip=${skip}`,
       `--format=${format}`,
@@ -227,7 +230,9 @@ export async function getLogWithParents(
 
   const entries = result.split('---END---\n').filter(Boolean);
 
-  return entries.map(entry => {
+  // Deduplicate — reflog can show the same commit multiple times
+  const seen = new Set<string>();
+  const allCommits = entries.map(entry => {
     const lines = entry.split('\n');
     const hash = lines[0];
     const abbreviatedHash = lines[1];
@@ -268,6 +273,13 @@ export async function getLogWithParents(
       tags,
       isHead: hash === headHash,
     };
+  });
+
+  // Deduplicate commits (reflog may include the same hash multiple times)
+  return allCommits.filter(c => {
+    if (seen.has(c.hash)) return false;
+    seen.add(c.hash);
+    return true;
   });
 }
 
@@ -412,6 +424,38 @@ export async function uncommit(repoPath: string, commitHash: string): Promise<vo
   await git.reset(['--mixed', 'HEAD~1']);
 }
 
+export async function checkoutCommit(repoPath: string, commitHash: string): Promise<{ branch: string }> {
+  const git = getGit(repoPath);
+  const status = await git.status();
+  let branch = status.current;
+
+  // If in detached HEAD, find the default branch to move
+  if (!branch || branch === 'HEAD') {
+    const branches = await git.branchLocal();
+    // Detect the remote default branch, fall back to first local branch
+    let remoteBranch: string | null = null;
+    try {
+      const remoteInfo = await git.raw(['remote', 'show', 'origin']);
+      const headMatch = remoteInfo.match(/HEAD branch:\s*(\S+)/);
+      if (headMatch) remoteBranch = headMatch[1];
+    } catch { /* no remote configured */ }
+    branch = (remoteBranch && branches.all.find(b => b === remoteBranch))
+      || branches.all[0]
+      || null;
+    if (!branch) {
+      throw new Error('No local branch found to move.');
+    }
+    // Move the branch pointer to the target commit and check it out
+    await git.raw(['branch', '-f', branch, commitHash]);
+    await git.checkout([branch]);
+  } else {
+    // Already on a branch — just reset it
+    await git.reset(['--hard', commitHash]);
+  }
+
+  return { branch };
+}
+
 export async function discardChanges(repoPath: string, files: string[]): Promise<void> {
   const git = getGit(repoPath);
   await git.checkout(['--', ...files]);
@@ -554,7 +598,26 @@ export async function gitPull(repoPath: string, strategy?: 'merge' | 'rebase'): 
     return doPull();
   }
 
-  const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+  // Get current branch — on a fresh repo with no commits, HEAD doesn't exist
+  let branch: string;
+  try {
+    branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+  } catch {
+    // Fresh repo with no commits — detect the remote's default branch
+    branch = 'main';
+    try {
+      const remoteInfo = await git.raw(['remote', 'show', 'origin']);
+      const headMatch = remoteInfo.match(/HEAD branch:\s*(\S+)/);
+      if (headMatch) branch = headMatch[1];
+    } catch {
+      // No remote or unreachable — try git config default
+      try {
+        const configured = (await git.raw(['config', 'init.defaultBranch'])).trim();
+        if (configured) branch = configured;
+      } catch { /* use 'main' as last resort */ }
+    }
+  }
+
   try {
     return await doPull('origin', branch);
   } catch (err: any) {
@@ -565,22 +628,30 @@ export async function gitPull(repoPath: string, strategy?: 'merge' | 'rebase'): 
   }
 }
 
-export async function gitPush(repoPath: string, setUpstream?: boolean, upToCommit?: string): Promise<string> {
+export async function gitPush(repoPath: string, setUpstream?: boolean, upToCommit?: string, force?: boolean): Promise<string> {
   const git = getGit(repoPath);
   const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
 
   if (upToCommit) {
     // Push only up to a specific commit: git push origin <hash>:refs/heads/<branch>
-    await git.push(['origin', `${upToCommit}:refs/heads/${branch}`]);
+    const args = ['origin', `${upToCommit}:refs/heads/${branch}`];
+    if (force) args.unshift('--force-with-lease');
+    await git.push(args);
     return `Pushed up to ${upToCommit.slice(0, 7)}`;
   }
 
   if (setUpstream) {
-    await git.push(['--set-upstream', 'origin', branch]);
+    const args = ['--set-upstream', 'origin', branch];
+    if (force) args.unshift('--force-with-lease');
+    await git.push(args);
     return `Pushed and set upstream for ${branch}`;
   }
-  await git.push('origin');
-  return 'Pushed successfully';
+  if (force) {
+    await git.push(['--force-with-lease', 'origin', branch]);
+  } else {
+    await git.push('origin');
+  }
+  return force ? `Force pushed ${branch} successfully` : 'Pushed successfully';
 }
 
 export async function getFileContent(repoPath: string, filePath: string, commitHash?: string): Promise<Buffer> {

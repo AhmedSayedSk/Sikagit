@@ -152,6 +152,17 @@ router.post('/uncommit', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true });
 }));
 
+router.post('/checkout', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { hash } = req.body;
+  if (!hash) {
+    res.status(400).json({ success: false, error: 'Missing required field: hash' });
+    return;
+  }
+  const result = await withRepoLock(repoPath, () => gitService.checkoutCommit(repoPath, hash));
+  res.json({ success: true, data: result });
+}));
+
 router.post('/discard', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const { files } = req.body;
@@ -228,8 +239,8 @@ router.post('/pull', asyncHandler(async (req: Request, res: Response) => {
 
 router.post('/push', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const { setUpstream, upToCommit } = req.body;
-  const message = await withRepoLock(repoPath, () => gitService.gitPush(repoPath, setUpstream, upToCommit));
+  const { setUpstream, upToCommit, force } = req.body;
+  const message = await withRepoLock(repoPath, () => gitService.gitPush(repoPath, setUpstream, upToCommit, force));
   res.json({ success: true, data: { message } });
 }));
 
