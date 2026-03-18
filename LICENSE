@@ -1,0 +1,88 @@
+Sikasio Source Available License
+Version 1.0, March 2026
+
+Copyright (c) 2024-present Sikasio. All rights reserved.
+https://sikasio.com
+
+TERMS AND CONDITIONS
+
+1. DEFINITIONS
+
+   "Software" refers to SikaGit, including all source code, documentation,
+   and associated files in this repository.
+
+   "Sikasio" refers to the Sikasio organization, its founders, and authorized
+   representatives.
+
+   "Personal Use" means use by an individual for non-commercial purposes,
+   including personal projects, learning, education, and open-source
+   contributions.
+
+   "Commercial Use" means any use of the Software in connection with a
+   business, organization, or revenue-generating activity, including but not
+   limited to: use within a company or team, offering the Software as a
+   hosted service, bundling the Software with a commercial product, or using
+   the Software to provide paid services to clients.
+
+2. GRANT OF RIGHTS
+
+   Subject to the terms of this License, Sikasio hereby grants you a
+   worldwide, non-exclusive, non-transferable, royalty-free license to:
+
+   a) Use, copy, and modify the Software for Personal Use.
+   b) Run the Software on your own infrastructure for Personal Use.
+   c) Create and distribute derivative works for Personal Use, provided
+      that such derivative works include a copy of this License and
+      clearly attribute the original Software to Sikasio.
+
+3. RESTRICTIONS
+
+   You may NOT, without prior written permission from Sikasio:
+
+   a) Use the Software for any Commercial Use.
+   b) Sell, sublicense, rent, lease, or lend the Software.
+   c) Offer the Software as a hosted or managed service to third parties.
+   d) Remove or alter any copyright notices, license texts, or attribution
+      to Sikasio from the Software.
+   e) Use the Sikasio name, logo, or trademarks to endorse or promote
+      derivative works without written permission.
+
+4. COMMERCIAL LICENSING
+
+   Commercial use of the Software requires a separate commercial license
+   from Sikasio. To inquire about commercial licensing, contact:
+
+   Email: info@sikasio.com
+   Website: https://sikasio.com
+
+5. CONTRIBUTIONS
+
+   By submitting contributions (pull requests, patches, or other
+   modifications) to this repository, you agree to assign the copyright
+   of your contributions to Sikasio, and you grant Sikasio a perpetual,
+   worldwide, non-exclusive, royalty-free license to use, reproduce,
+   modify, and distribute your contributions as part of the Software
+   under any license terms Sikasio chooses.
+
+6. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NONINFRINGEMENT. IN NO EVENT SHALL SIKASIO BE LIABLE FOR ANY CLAIM,
+   DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT,
+   OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+7. TERMINATION
+
+   This License is effective until terminated. Your rights under this
+   License will terminate automatically without notice if you fail to
+   comply with any of its terms. Upon termination, you must cease all
+   use of the Software and destroy all copies in your possession.
+
+8. GOVERNING LAW
+
+   This License shall be governed by and construed in accordance with
+   the laws of the Arab Republic of Egypt. Any disputes arising under
+   this License shall be resolved in the competent courts of Cairo, Egypt.
