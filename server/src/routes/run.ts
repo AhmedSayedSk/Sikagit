@@ -296,9 +296,25 @@ router.post('/:id/start', (req: Request, res: Response) => {
     detectedPorts.set(repo.id, repo.runPort);
   }
 
+  // Force Webpack mode for Next.js 16+ (Turbopack ignores WATCHPACK_POLLING;
+  // its own polling requires per-project next.config changes).
+  // Webpack respects WATCHPACK_POLLING, so --webpack ensures HMR works.
+  if (/\bnext\s+dev\b/.test(cmd) && !/--webpack\b/.test(cmd) && !/--turbopack\b/.test(cmd)) {
+    cmd = cmd.replace(/\bnext\s+dev\b/, 'next dev --webpack');
+  }
+
   const child = spawn('sh', ['-c', cmd], {
     cwd: repo.path,
-    env: { ...process.env, FORCE_COLOR: '1', ...portEnv },
+    env: {
+      ...process.env,
+      FORCE_COLOR: '1',
+      // Enable polling-based file watching for HMR inside Docker
+      // (inotify doesn't work reliably on mounted host volumes)
+      WATCHPACK_POLLING: 'true',       // Next.js / Webpack
+      CHOKIDAR_USEPOLLING: 'true',     // Vite, CRA, Angular, most Node.js tools
+      CHOKIDAR_INTERVAL: '1000',       // 1s poll interval (reduce CPU)
+      ...portEnv,
+    },
     detached: true,
   });
 
