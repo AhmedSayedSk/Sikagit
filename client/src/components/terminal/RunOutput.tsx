@@ -9,17 +9,49 @@ interface RunOutputProps {
   onClose: () => void;
 }
 
+const URL_RE = /https?:\/\/[^\s)>\]"'`]+/g;
+
+/** Split text into plain strings and clickable <a> elements */
+function linkify(text: string, style: React.CSSProperties) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  URL_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = URL_RE.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    const href = m[0];
+    parts.push(
+      <a
+        key={m.index}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline hover:brightness-125"
+        style={{ ...style, cursor: 'pointer' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {href}
+      </a>,
+    );
+    last = m.index + href.length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 function AnsiLine({ text }: { text: string }) {
   const segments = parseAnsi(text);
   return (
     <pre className="whitespace-pre-wrap break-all m-0">
-      {segments.map((seg, i) =>
-        Object.keys(seg.style).length > 0 ? (
-          <span key={i} style={seg.style}>{seg.text}</span>
+      {segments.map((seg, i) => {
+        const hasStyle = Object.keys(seg.style).length > 0;
+        const children = linkify(seg.text, seg.style);
+        return hasStyle ? (
+          <span key={i} style={seg.style}>{children}</span>
         ) : (
-          seg.text
-        )
-      )}
+          <span key={i}>{children}</span>
+        );
+      })}
     </pre>
   );
 }
