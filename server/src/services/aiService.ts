@@ -31,6 +31,10 @@ function truncateDiff(diff: string): string {
   return diff.substring(0, MAX_DIFF_LENGTH) + '\n\n... [diff truncated due to size]';
 }
 
+function normalizeFilePath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/^\.\//, '').trim();
+}
+
 export async function suggestCommitMessage(
   apiKey: string,
   model: string,
@@ -78,35 +82,62 @@ export async function suggestSmartCommitGroups(
 Rules:
 - Group files that are part of the same feature, fix, or change together
 - Each group should represent one logical unit of work
+- IMPORTANT: You MUST use the EXACT file paths as listed below — do not modify, prefix, or alter them in any way
 - Every file must appear in exactly one group
 - Title: max 72 chars, imperative mood, conventional commit style (feat:, fix:, refactor:, etc.)
 - Description: brief explanation of what the group of changes does
 - If all files are related to one change, return a single group
 
-Staged files:
+Staged files (use these EXACT paths in your response):
 ${stagedFiles.join('\n')}
 
 Diff:
 ${truncateDiff(diff)}
 
-Return JSON: { "groups": [{ "files": ["path1", "path2"], "title": "...", "description": "..." }] }`;
+Return JSON: { "groups": [{ "files": ["exact/path/from/list"], "title": "...", "description": "..." }] }`;
 
   const text = await callGemini(apiKey, model, prompt);
+  console.log('[SmartCommit] AI raw response:', text.substring(0, 500));
+
   try {
     const result = JSON.parse(text);
-    const groups: CommitGroup[] = result.groups || [];
+    let groups: CommitGroup[] = result.groups || [];
+    console.log('[SmartCommit] Parsed groups:', groups.length, '| Staged files:', stagedFiles.length);
+
+    // Build a normalization map: normalizedPath -> originalStagedPath
+    const normalizedStaged = new Map(stagedFiles.map(f => [normalizeFilePath(f), f]));
+
+    // Normalize AI-returned file paths to match staged files
+    for (const group of groups) {
+      group.files = group.files.map(f => {
+        const normalized = normalizeFilePath(f);
+        return normalizedStaged.get(normalized) || f;
+      });
+    }
 
     // Validate all files are accounted for
     const allGroupedFiles = new Set(groups.flatMap(g => g.files));
+    const missingFiles: string[] = [];
     for (const file of stagedFiles) {
       if (!allGroupedFiles.has(file)) {
-        // Add missing files to last group or create new group
-        if (groups.length > 0) {
-          groups[groups.length - 1].files.push(file);
-        } else {
-          groups.push({ files: [file], title: 'chore: update remaining files', description: '' });
-        }
+        missingFiles.push(file);
       }
+    }
+
+    if (missingFiles.length > 0) {
+      console.log('[SmartCommit] Files missing from AI groups:', missingFiles);
+    }
+
+    // If AI grouping completely failed (no files matched), generate a proper message
+    if (missingFiles.length === stagedFiles.length) {
+      console.log('[SmartCommit] All files unmatched — falling back to single commit message');
+      const fallback = await suggestCommitMessage(apiKey, model, diff);
+      return [{ files: stagedFiles, title: fallback.title, description: fallback.description }];
+    }
+
+    // Add missing files to last group
+    if (missingFiles.length > 0 && groups.length > 0) {
+      groups[groups.length - 1].files.push(...missingFiles);
     }
 
     // Remove files that don't exist in staged
@@ -117,7 +148,10 @@ Return JSON: { "groups": [{ "files": ["path1", "path2"], "title": "...", "descri
 
     // Remove empty groups
     return groups.filter(g => g.files.length > 0);
-  } catch {
-    throw new Error('Failed to parse AI response');
+  } catch (err) {
+    console.error('[SmartCommit] Failed to parse AI response:', err);
+    // Fallback: generate a single commit message instead of failing
+    const fallback = await suggestCommitMessage(apiKey, model, diff);
+    return [{ files: stagedFiles, title: fallback.title, description: fallback.description }];
   }
 }
