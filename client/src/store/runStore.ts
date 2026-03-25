@@ -24,6 +24,11 @@ interface RunState {
   stopBuild: (repoId: string) => Promise<void>;
   checkBuildStatus: (repoId: string) => Promise<void>;
   clearBuildOutput: (repoId: string) => void;
+  // Install
+  startInstall: (repoId: string) => Promise<void>;
+  stopInstall: (repoId: string) => Promise<void>;
+  checkInstallStatus: (repoId: string) => Promise<void>;
+  clearInstallOutput: (repoId: string) => void;
 }
 
 const subscribedKeys = new Set<string>();
@@ -78,10 +83,22 @@ function subscribeToKey(key: string) {
         playError();
       }
     }
+    // Notify when install finishes
+    if (key.startsWith('install:')) {
+      const { addToast } = useToastStore.getState();
+      if (code === 0) {
+        addToast('success', 'Dependencies installed successfully');
+        playSuccess();
+      } else {
+        addToast('error', `Install failed with exit code ${code}`);
+        playError();
+      }
+    }
   });
 }
 
 const buildKey = (id: string) => `build:${id}`;
+const installKey = (id: string) => `install:${id}`;
 
 export const useRunStore = create<RunState>()((set) => ({
   outputs: {},
@@ -219,6 +236,74 @@ export const useRunStore = create<RunState>()((set) => ({
     const bk = buildKey(repoId);
     set((state) => ({
       outputs: { ...state.outputs, [bk]: [] },
+    }));
+  },
+
+  // ─── Install ───
+
+  startInstall: async (repoId: string) => {
+    const ik = installKey(repoId);
+    subscribeToKey(ik);
+    set((state) => ({
+      running: { ...state.running, [ik]: true },
+      outputs: { ...state.outputs, [ik]: [] },
+    }));
+    try {
+      const result = await api.installDeps(repoId);
+      set((state) => ({
+        runTargets: { ...state.runTargets, [ik]: result.runTarget },
+      }));
+    } catch (err: any) {
+      set((state) => ({
+        running: { ...state.running, [ik]: false },
+        outputs: {
+          ...state.outputs,
+          [ik]: [...(state.outputs[ik] || []), `Error: ${err.message}\n`],
+        },
+      }));
+    }
+  },
+
+  stopInstall: async (repoId: string) => {
+    const ik = installKey(repoId);
+    try {
+      await api.stopInstall(repoId);
+    } catch {
+      set((state) => ({
+        running: { ...state.running, [ik]: false },
+      }));
+    }
+  },
+
+  checkInstallStatus: async (repoId: string) => {
+    const ik = installKey(repoId);
+    subscribeToKey(ik);
+    try {
+      const { running, runTarget } = await api.installStatus(repoId);
+      set((state) => ({
+        running: { ...state.running, [ik]: running },
+        runTargets: { ...state.runTargets, [ik]: runTarget },
+      }));
+      if (running) {
+        const current = useRunStore.getState().outputs[ik];
+        if (!current || current.length === 0) {
+          try {
+            const { lines } = await api.installOutput(repoId);
+            if (lines.length > 0) {
+              set((state) => ({
+                outputs: { ...state.outputs, [ik]: lines },
+              }));
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+  },
+
+  clearInstallOutput: (repoId: string) => {
+    const ik = installKey(repoId);
+    set((state) => ({
+      outputs: { ...state.outputs, [ik]: [] },
     }));
   },
 }));
