@@ -82,6 +82,7 @@ export interface RepoBookmark {
   runCommand?: string;   // e.g. "yarn serve", "npm run dev"
   runPort?: number;      // fixed port for the dev server
   buildCommand?: string; // e.g. "npm run build", "yarn build"
+  autoBuildOnCheckout?: boolean; // auto-run build command after checkout
 }
 
 export interface Project {

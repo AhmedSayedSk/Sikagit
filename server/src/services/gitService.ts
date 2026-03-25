@@ -439,15 +439,90 @@ export async function uncommit(repoPath: string, commitHash: string): Promise<vo
   await git.reset(['--mixed', 'HEAD~1']);
 }
 
+export async function mergeBranch(
+  repoPath: string,
+  sourceBranch: string
+): Promise<{ message: string; merged: boolean; conflicts?: string[] }> {
+  const git = getGit(repoPath);
+  const status = await git.status();
+  const currentBranch = status.current || 'HEAD';
+
+  try {
+    await git.merge([sourceBranch]);
+    return {
+      merged: true,
+      message: `Merged ${sourceBranch} into ${currentBranch}`,
+    };
+  } catch (err: any) {
+    // Check if it's a merge conflict
+    const postStatus = await git.status();
+    if (postStatus.conflicted.length > 0) {
+      return {
+        merged: false,
+        message: `Merge conflict: ${postStatus.conflicted.length} file(s) need resolution`,
+        conflicts: postStatus.conflicted,
+      };
+    }
+    throw err;
+  }
+}
+
+export async function abortMerge(repoPath: string): Promise<void> {
+  const git = getGit(repoPath);
+  await git.merge(['--abort']);
+}
+
+export async function deleteBranch(repoPath: string, branchName: string, force = false): Promise<void> {
+  const git = getGit(repoPath);
+  await git.branch([force ? '-D' : '-d', branchName]);
+}
+
 export async function checkoutCommit(repoPath: string, commitHash: string): Promise<{ branch: string }> {
   const git = getGit(repoPath);
   const status = await git.status();
-  let branch = status.current;
 
-  // If in detached HEAD, find the default branch to move
+  // Check if any local branch points at this commit — if so, switch to it
+  const branches = await git.branchLocal();
+  let targetBranch: string | null = null;
+
+  for (const b of branches.all) {
+    try {
+      const branchHash = (await git.raw(['rev-parse', b])).trim();
+      if (branchHash === commitHash || branchHash.startsWith(commitHash) || commitHash.startsWith(branchHash)) {
+        targetBranch = b;
+        break;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Also check if any remote branch points at this commit and create a local tracking branch
+  if (!targetBranch) {
+    try {
+      const remoteRefs = (await git.raw(['branch', '-r', '--points-at', commitHash])).trim();
+      if (remoteRefs) {
+        const firstRef = remoteRefs.split('\n')[0].trim();
+        // e.g. "origin/feature/post-production-daw" → "feature/post-production-daw"
+        const match = firstRef.match(/^origin\/(.+)$/);
+        if (match && !branches.all.includes(match[1])) {
+          // Create local tracking branch
+          await git.raw(['checkout', '-b', match[1], firstRef]);
+          return { branch: match[1] };
+        } else if (match) {
+          targetBranch = match[1];
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (targetBranch && targetBranch !== status.current) {
+    // Switch to the branch that points at this commit
+    await git.checkout([targetBranch]);
+    return { branch: targetBranch };
+  }
+
+  // No branch at this commit — move the current branch to it
+  let branch = status.current;
   if (!branch || branch === 'HEAD') {
-    const branches = await git.branchLocal();
-    // Detect the remote default branch, fall back to first local branch
     let remoteBranch: string | null = null;
     try {
       const remoteInfo = await git.raw(['remote', 'show', 'origin']);
@@ -460,11 +535,9 @@ export async function checkoutCommit(repoPath: string, commitHash: string): Prom
     if (!branch) {
       throw new Error('No local branch found to move.');
     }
-    // Move the branch pointer to the target commit and check it out
     await git.raw(['branch', '-f', branch, commitHash]);
     await git.checkout([branch]);
   } else {
-    // Already on a branch — just reset it
     await git.reset(['--hard', commitHash]);
   }
 
