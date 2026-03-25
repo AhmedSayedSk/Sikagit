@@ -58,9 +58,9 @@ router.delete('/:id', (req: Request, res: Response) => {
 
 router.patch('/:id', (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { name, group, avatar, runCommand, runPort, buildCommand } = req.body;
+  const { name, group, avatar, runCommand, runPort, buildCommand, autoBuildOnCheckout } = req.body;
 
-  const updated = db.updateRepo(id, { name, group, avatar, runCommand, runPort, buildCommand });
+  const updated = db.updateRepo(id, { name, group, avatar, runCommand, runPort, buildCommand, autoBuildOnCheckout });
   if (!updated) {
     res.status(404).json({ success: false, error: 'Repository not found' });
     return;
