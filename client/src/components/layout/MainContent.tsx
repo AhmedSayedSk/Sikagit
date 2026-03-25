@@ -10,7 +10,8 @@ import { FileStatusPanel } from '../files/FileStatusPanel';
 import { ResizeHandle } from '../ui/ResizeHandle';
 import { RepoSettingsDialog } from '../operations/RepoSettingsDialog';
 import { RunOutput } from '../terminal/RunOutput';
-import { GitBranch, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2, Settings, Trash2, Play, Square, Hammer, Terminal } from 'lucide-react';
+import { GitBranch, GitMerge, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2, Settings, Trash2, Play, Square, Hammer, Terminal, Package } from 'lucide-react';
+import { MergeDialog } from '../operations/MergeDialog';
 import { useRunStore } from '../../store/runStore';
 import { useProjectStore } from '../../store/projectStore';
 import { cn } from '../../lib/utils';
@@ -34,6 +35,9 @@ export function MainContent() {
   const [showRepoSettings, setShowRepoSettings] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showBuildTerminal, setShowBuildTerminal] = useState(false);
+  const [showInstallTerminal, setShowInstallTerminal] = useState(false);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [mergePreselect, setMergePreselect] = useState<string | undefined>();
   const addToast = useToastStore(s => s.addToast);
 
   const startRun = useRunStore(s => s.startRun);
@@ -49,6 +53,15 @@ export function MainContent() {
   const stopBuild = useRunStore(s => s.stopBuild);
   const checkBuildStatus = useRunStore(s => s.checkBuildStatus);
   const isBuilding = useRunStore(s => activeRepoId ? !!s.running[`build:${activeRepoId}`] : false);
+  const startInstall = useRunStore(s => s.startInstall);
+  const stopInstall = useRunStore(s => s.stopInstall);
+  const checkInstallStatus = useRunStore(s => s.checkInstallStatus);
+  const isInstalling = useRunStore(s => activeRepoId ? !!s.running[`install:${activeRepoId}`] : false);
+  const hasInstallOutput = useRunStore(s => {
+    if (!activeRepoId) return false;
+    const out = s.outputs[`install:${activeRepoId}`];
+    return out && out.length > 0;
+  });
   const hasBuildOutput = useRunStore(s => {
     if (!activeRepoId) return false;
     const bk = `build:${activeRepoId}`;
@@ -60,12 +73,14 @@ export function MainContent() {
   useEffect(() => {
     if (isRunning) setShowTerminal(true);
     if (isBuilding) setShowBuildTerminal(true);
-  }, [activeRepoId, isRunning, isBuilding]);
+    if (isInstalling) setShowInstallTerminal(true);
+  }, [activeRepoId, isRunning, isBuilding, isInstalling]);
 
   // Check run/build status for ALL repos on mount (survives refresh)
   useEffect(() => {
     repos.filter(r => r.runCommand).forEach(r => checkStatus(r.id));
     repos.filter(r => r.buildCommand).forEach(r => checkBuildStatus(r.id));
+    repos.forEach(r => checkInstallStatus(r.id));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -75,8 +90,9 @@ export function MainContent() {
       fetchAll(repo.path);
       if (repo.runCommand) checkStatus(repo.id);
       if (repo.buildCommand) checkBuildStatus(repo.id);
+      checkInstallStatus(repo.id);
     }
-  }, [repo?.id, fetchLog, fetchAll, checkStatus, checkBuildStatus]);
+  }, [repo?.id, fetchLog, fetchAll, checkStatus, checkBuildStatus, checkInstallStatus]);
 
   const handleCommitListResize = useCallback((delta: number) => {
     setCommitListWidth(commitListWidth + delta);
@@ -229,74 +245,105 @@ export function MainContent() {
         </div>
         <span className="text-xs text-text-secondary flex-1">{repo.displayPath}</span>
 
-        {/* Run & Build */}
-        {(repo.runCommand || repo.buildCommand) && (
-          <div className="flex items-center border border-border rounded-lg overflow-hidden">
-            {repo.runCommand && (
-              <button
-                onClick={() => {
-                  if (isRunning) {
-                    stopRun(repo.id);
-                  } else {
-                    startRun(repo.id);
-                    setShowTerminal(true);
-                  }
-                }}
-                className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary transition-colors text-[0.7rem]',
-                  repo.buildCommand && 'border-r border-border',
-                  isRunning
-                    ? 'text-danger hover:bg-danger/10'
-                    : 'text-success hover:bg-success/10'
-                )}
-                title={isRunning ? 'Stop' : `Run: ${repo.runCommand}`}
-              >
-                {isRunning ? <Square size={12} /> : <Play size={12} />}
-                <span>{isRunning ? 'Stop' : 'Run'}</span>
-              </button>
+        {/* Install, Run & Build — combined group */}
+        <div className="flex items-center border border-border rounded-lg overflow-hidden">
+          {/* Install */}
+          <button
+            onClick={async () => {
+              if (isInstalling) {
+                stopInstall(repo.id);
+              } else {
+                const confirmed = await confirm({
+                  title: 'Install Dependencies',
+                  message: 'This will remove node_modules and do a fresh install.\nAuto-detects package manager (npm/yarn/pnpm/bun).',
+                  confirmLabel: 'Install',
+                  variant: 'info',
+                });
+                if (confirmed) {
+                  startInstall(repo.id);
+                  setShowInstallTerminal(true);
+                }
+              }
+            }}
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary transition-colors text-[0.7rem]',
+              (repo.runCommand || repo.buildCommand) && 'border-r border-border',
+              isInstalling
+                ? 'text-danger hover:bg-danger/10'
+                : 'text-accent hover:bg-accent/10'
             )}
-            {repo.buildCommand && (
-              <button
-                onClick={() => {
-                  if (isBuilding) {
-                    stopBuild(repo.id);
-                  } else {
-                    startBuild(repo.id);
-                    setShowBuildTerminal(true);
-                  }
-                }}
-                className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary transition-colors text-[0.7rem]',
-                  isBuilding
-                    ? 'text-danger hover:bg-danger/10'
-                    : 'text-warning hover:bg-warning/10'
-                )}
-                title={isBuilding ? 'Stop build' : `Build: ${repo.buildCommand}`}
-              >
-                {isBuilding ? <Square size={12} /> : <Hammer size={12} />}
-                <span>{isBuilding ? 'Stop' : 'Build'}</span>
-              </button>
+            title={isInstalling ? 'Stop install' : 'Clean install dependencies'}
+          >
+            {isInstalling ? <Square size={12} /> : <Package size={12} />}
+            <span>{isInstalling ? 'Stop' : 'Install'}</span>
+          </button>
+          {/* Run */}
+          {repo.runCommand && (
+            <button
+              onClick={() => {
+                if (isRunning) {
+                  stopRun(repo.id);
+                } else {
+                  startRun(repo.id);
+                  setShowTerminal(true);
+                }
+              }}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary transition-colors text-[0.7rem]',
+                repo.buildCommand && 'border-r border-border',
+                isRunning
+                  ? 'text-danger hover:bg-danger/10'
+                  : 'text-success hover:bg-success/10'
+              )}
+              title={isRunning ? 'Stop' : `Run: ${repo.runCommand}`}
+            >
+              {isRunning ? <Square size={12} /> : <Play size={12} />}
+              <span>{isRunning ? 'Stop' : 'Run'}</span>
+            </button>
+          )}
+          {/* Build */}
+          {repo.buildCommand && (
+            <button
+              onClick={() => {
+                if (isBuilding) {
+                  stopBuild(repo.id);
+                } else {
+                  startBuild(repo.id);
+                  setShowBuildTerminal(true);
+                }
+              }}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1 bg-bg-secondary transition-colors text-[0.7rem]',
+                isBuilding
+                  ? 'text-danger hover:bg-danger/10'
+                  : 'text-warning hover:bg-warning/10'
+              )}
+              title={isBuilding ? 'Stop build' : `Build: ${repo.buildCommand}`}
+            >
+              {isBuilding ? <Square size={12} /> : <Hammer size={12} />}
+              <span>{isBuilding ? 'Stop' : 'Build'}</span>
+            </button>
             )}
-            {(hasRunOutput || isRunning || hasBuildOutput || isBuilding) && (
+            {(hasRunOutput || isRunning || hasBuildOutput || isBuilding || hasInstallOutput || isInstalling) && (
               <button
                 onClick={() => {
-                  const anyVisible = showTerminal || showBuildTerminal;
+                  const anyVisible = showTerminal || showBuildTerminal || showInstallTerminal;
                   setShowTerminal(!anyVisible);
                   setShowBuildTerminal(!anyVisible);
+                  setShowInstallTerminal(!anyVisible);
                 }}
                 className={cn(
                   'flex items-center px-2 py-1 bg-bg-secondary border-l border-border transition-colors text-[0.7rem]',
-                  (showTerminal || showBuildTerminal)
+                  (showTerminal || showBuildTerminal || showInstallTerminal)
                     ? 'text-accent hover:bg-accent/10'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
                 )}
-                title={(showTerminal || showBuildTerminal) ? 'Hide terminals' : 'Show terminals'}
+                title={(showTerminal || showBuildTerminal || showInstallTerminal) ? 'Hide terminals' : 'Show terminals'}
               >
                 <Terminal size={12} />
               </button>
             )}
           </div>
-        )}
 
         {/* Remote actions */}
         {status && hasRemote && (
@@ -415,7 +462,40 @@ export function MainContent() {
         >
           {/* Commit list */}
           <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            <CommitList repoPath={repo.path} />
+            <CommitList
+              repoPath={repo.path}
+              onBranchAction={async (branch, action) => {
+                if (action === 'merge') {
+                  setMergePreselect(branch);
+                  setShowMergeDialog(true);
+                } else if (action === 'checkout') {
+                  try {
+                    const { branch: switched } = await api.checkout(repo.path, branch);
+                    addToast('success', `Switched to ${switched}`);
+                    fetchAll(repo.path);
+                    fetchLog(repo.path);
+                  } catch (err: any) {
+                    addToast('error', err.message);
+                  }
+                } else if (action === 'delete') {
+                  const confirmed = await confirm({
+                    title: 'Delete Branch',
+                    message: `Are you sure you want to delete branch "${branch}"?\n\nThis cannot be undone.`,
+                    confirmLabel: 'Delete',
+                    variant: 'danger',
+                  });
+                  if (!confirmed) return;
+                  try {
+                    await api.deleteBranch(repo.path, branch);
+                    addToast('success', `Deleted branch ${branch}`);
+                    fetchAll(repo.path);
+                    fetchLog(repo.path);
+                  } catch (err: any) {
+                    addToast('error', err.message);
+                  }
+                }
+              }}
+            />
           </div>
 
           {/* Resize handle between list and staging */}
@@ -443,10 +523,10 @@ export function MainContent() {
       </div>
 
       {/* Terminal panels — side by side */}
-      {(showTerminal || showBuildTerminal) && (
+      {(showTerminal || showBuildTerminal || showInstallTerminal) && (
         <div className="flex border-t border-border">
           {showTerminal && repo.runCommand && (
-            <div className={cn('flex-1 min-w-0', showBuildTerminal && repo.buildCommand && 'border-r border-border')}>
+            <div className={cn('flex-1 min-w-0', (showBuildTerminal || showInstallTerminal) && 'border-r border-border')}>
               <RunOutput
                 repoId={repo.id}
                 command={repo.runCommand}
@@ -455,7 +535,7 @@ export function MainContent() {
             </div>
           )}
           {showBuildTerminal && repo.buildCommand && (
-            <div className="flex-1 min-w-0">
+            <div className={cn('flex-1 min-w-0', showInstallTerminal && 'border-r border-border')}>
               <RunOutput
                 repoId={`build:${repo.id}`}
                 command={repo.buildCommand}
@@ -463,7 +543,25 @@ export function MainContent() {
               />
             </div>
           )}
+          {showInstallTerminal && (
+            <div className="flex-1 min-w-0">
+              <RunOutput
+                repoId={`install:${repo.id}`}
+                command="npm install (clean)"
+                onClose={() => setShowInstallTerminal(false)}
+              />
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Merge dialog */}
+      {showMergeDialog && repo && (
+        <MergeDialog
+          repoPath={repo.path}
+          preselectedBranch={mergePreselect}
+          onClose={() => setShowMergeDialog(false)}
+        />
       )}
 
       {/* Repo settings dialog */}

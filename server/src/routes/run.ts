@@ -284,8 +284,9 @@ router.post('/:id/start', (req: Request, res: Response) => {
   detectedPorts.delete(repo.id);
   outputBuffers.delete(repo.id);
 
-  // If a fixed port is configured, set PORT env and append --port flag
-  let cmd = repo.runCommand;
+  // Clear framework caches before starting (ensures fresh run after branch switch)
+  // Removes: .next, .vite, .cache, dist/.cache, .parcel-cache, .turbo
+  let cmd = 'rm -rf .next .vite .cache .parcel-cache .turbo dist/.cache 2>/dev/null; ' + repo.runCommand;
   const portEnv: Record<string, string> = {};
   if (repo.runPort) {
     portEnv.PORT = String(repo.runPort);
@@ -381,6 +382,90 @@ router.get('/:id/status', (req: Request, res: Response) => {
 // GET /api/v1/run/:id/output — returns buffered output lines
 router.get('/:id/output', (req: Request, res: Response) => {
   const lines = outputBuffers.get(req.params.id) ?? [];
+  res.json({ success: true, data: { lines } });
+});
+
+// ─── Install endpoint ───
+
+const installKey = (id: string) => `install:${id}`;
+
+router.post('/:id/install', (req: Request, res: Response) => {
+  const repo = db.getRepoById(req.params.id);
+  if (!repo) {
+    res.status(404).json({ success: false, error: 'Repository not found' });
+    return;
+  }
+  const ik = installKey(repo.id);
+  if (activeProcesses.has(ik)) {
+    res.status(409).json({ success: false, error: 'Install is already running' });
+    return;
+  }
+
+  outputBuffers.delete(ik);
+
+  // Auto-detect package manager from lock files, then clean + install
+  const cmd = 'rm -rf node_modules && if [ -f yarn.lock ]; then yarn install --frozen-lockfile; elif [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; elif [ -f bun.lockb ]; then bun install; else npm ci || npm install; fi';
+
+  const child = spawn('sh', ['-c', cmd], {
+    cwd: repo.path,
+    env: { ...process.env, FORCE_COLOR: '1' },
+    detached: true,
+  });
+
+  activeProcesses.set(ik, child);
+
+  child.stdout?.on('data', (data: Buffer) => {
+    processOutput(ik, data.toString());
+  });
+
+  child.stderr?.on('data', (data: Buffer) => {
+    processOutput(ik, data.toString());
+  });
+
+  child.on('exit', (code) => {
+    clearOutputState(ik);
+    prevCpu.delete(ik);
+    activeProcesses.delete(ik);
+    io.emit(`run:exit:${ik}`, code ?? 1);
+  });
+
+  child.on('error', (err) => {
+    clearOutputState(ik);
+    prevCpu.delete(ik);
+    activeProcesses.delete(ik);
+    bufferOutput(ik, `Error: ${err.message}\n`);
+    io.emit(`run:output:${ik}`, `Error: ${err.message}\n`);
+    io.emit(`run:exit:${ik}`, 1);
+  });
+
+  const runTarget = repo.isWSL ? 'wsl' : 'windows';
+  res.json({ success: true, data: { status: 'started', runTarget } });
+});
+
+router.post('/:id/install/stop', (req: Request, res: Response) => {
+  const ik = installKey(req.params.id);
+  const child = activeProcesses.get(ik);
+  if (child && child.pid) {
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {
+      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+    }
+  }
+  res.json({ success: true, data: { wasRunning: !!child } });
+});
+
+router.get('/:id/install/status', (req: Request, res: Response) => {
+  const ik = installKey(req.params.id);
+  const running = activeProcesses.has(ik);
+  const repo = db.getRepoById(req.params.id);
+  const runTarget = repo?.isWSL ? 'wsl' : 'windows';
+  res.json({ success: true, data: { running, runTarget } });
+});
+
+router.get('/:id/install/output', (req: Request, res: Response) => {
+  const ik = installKey(req.params.id);
+  const lines = outputBuffers.get(ik) ?? [];
   res.json({ success: true, data: { lines } });
 });
 
