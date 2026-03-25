@@ -5,19 +5,23 @@ import { useStatusStore } from '../../store/statusStore';
 import { useUIStore } from '../../store/uiStore';
 import { useConfirmStore } from '../../store/confirmStore';
 import { useToastStore } from '../../store/toastStore';
+import { useRunStore } from '../../store/runStore';
+import { useRepoStore } from '../../store/repoStore';
 import { api } from '../../lib/api';
 import { CommitRow } from './CommitRow';
+import type { BranchAction } from './CommitRow';
 import { CommitGraph, getGraphWidth, UncommittedNode } from '../graph/CommitGraph';
 import { ColumnResizeHandle } from '../ui/ColumnResizeHandle';
 import { cn, truncateHash } from '../../lib/utils';
 
 interface CommitListProps {
   repoPath: string;
+  onBranchAction?: (branch: string, action: BranchAction) => void;
 }
 
 const ROW_HEIGHT = 28;
 
-export function CommitList({ repoPath }: CommitListProps) {
+export function CommitList({ repoPath, onBranchAction }: CommitListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const { commits, totalLanes, loading, hasMore, loadMore, fetchLog, selectedCommit, selectCommit } = useLogStore();
   const { status, selectFile } = useStatusStore();
@@ -29,8 +33,12 @@ export function CommitList({ repoPath }: CommitListProps) {
     colHashWidth, setColHashWidth,
   } = useUIStore();
   const confirm = useConfirmStore(s => s.confirm);
+  const confirmWithCheckbox = useConfirmStore(s => s.confirmWithCheckbox);
   const addToast = useToastStore(s => s.addToast);
   const fetchStatus = useStatusStore(s => s.fetchStatus);
+  const startBuild = useRunStore(s => s.startBuild);
+  const activeRepoId = useRepoStore(s => s.activeRepoId);
+  const activeRepo = useRepoStore(s => s.repos.find(r => r.id === activeRepoId));
   const [scrollTop, setScrollTop] = useState(0);
 
   const hasUncommitted = status && (
@@ -166,6 +174,7 @@ export function CommitList({ repoPath }: CommitListProps) {
               <CommitRow
                 commit={commits[virtualItem.index]}
                 graphWidth={graphWidth}
+                onBranchAction={onBranchAction}
                 columnWidths={columnWidths}
                 isSelected={selectedCommit === commits[virtualItem.index].hash}
                 onClick={() => {
@@ -177,18 +186,29 @@ export function CommitList({ repoPath }: CommitListProps) {
                 onDoubleClick={async () => {
                   const commit = commits[virtualItem.index];
                   if (commit.isHead) return;
-                  const confirmed = await confirm({
+                  const hasBuildCmd = !!activeRepo?.buildCommand;
+                  const result = await confirmWithCheckbox({
                     title: 'Checkout Commit',
                     message: `Move the current branch to commit ${truncateHash(commit.hash)}?\n\n"${commit.message}"\n\nThis will reset your branch to this commit. You can then force push to update the remote.`,
                     confirmLabel: 'Checkout',
                     variant: 'warning',
+                    ...(hasBuildCmd && {
+                      checkbox: {
+                        label: 'Build after checkout',
+                        defaultChecked: activeRepo?.autoBuildOnCheckout ?? false,
+                      },
+                    }),
                   });
-                  if (!confirmed) return;
+                  if (!result.confirmed) return;
                   try {
                     const { branch } = await api.checkout(repoPath, commit.hash);
-                    addToast('success', `Moved ${branch} to ${truncateHash(commit.hash)} — use Force Push to update remote`);
+                    addToast('success', `Switched to ${branch} at ${truncateHash(commit.hash)}`);
                     await fetchStatus(repoPath);
                     await fetchLog(repoPath);
+                    if (result.checkboxValue && activeRepo?.buildCommand) {
+                      addToast('info', 'Building after checkout...');
+                      startBuild(activeRepo.id);
+                    }
                   } catch (err: any) {
                     addToast('error', err.message);
                   }

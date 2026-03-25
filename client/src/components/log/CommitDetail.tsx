@@ -1,9 +1,12 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { X, Copy, Check, GitCommitHorizontal, User, Calendar, GitFork, Undo2, Loader2, Upload, RotateCcw } from 'lucide-react';
+import { X, Copy, Check, GitCommitHorizontal, GitMerge, User, Calendar, GitFork, Undo2, Loader2, Upload, RotateCcw } from 'lucide-react';
+import { MergeDialog } from '../operations/MergeDialog';
 import { useLogStore } from '../../store/logStore';
 import { useStatusStore } from '../../store/statusStore';
 import { useToastStore } from '../../store/toastStore';
 import { useConfirmStore } from '../../store/confirmStore';
+import { useRunStore } from '../../store/runStore';
+import { useRepoStore } from '../../store/repoStore';
 import { api } from '../../lib/api';
 import { truncateHash } from '../../lib/utils';
 import { DiffView } from '../diff/DiffView';
@@ -17,6 +20,11 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   const fetchStatus = useStatusStore(s => s.fetchStatus);
   const addToast = useToastStore(s => s.addToast);
   const confirm = useConfirmStore(s => s.confirm);
+  const confirmWithCheckbox = useConfirmStore(s => s.confirmWithCheckbox);
+  const startBuild = useRunStore(s => s.startBuild);
+  const repos = useRepoStore(s => s.repos);
+  const activeRepoId = useRepoStore(s => s.activeRepoId);
+  const activeRepo = repos.find(r => r.id === activeRepoId);
   const isUncommitted = selectedCommit === '__uncommitted__';
   const commit = isUncommitted ? null : commits.find(c => c.hash === selectedCommit);
   const [diff, setDiff] = useState<string>('');
@@ -24,6 +32,7 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   const [uncommitting, setUncommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
   const status = useStatusStore(s => s.status);
   const [scrollY, setScrollY] = useState(0);
   const collapseRef = useRef<HTMLDivElement>(null);
@@ -45,15 +54,28 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
     if (commit) {
       api.getDiff(repoPath, commit.hash, selectedCommitFile || undefined).then(setDiff).catch(() => setDiff(''));
       setScrollY(0);
+      setCollapseHeight(null);
     }
   }, [isUncommitted, commit?.hash, repoPath, selectedCommitFile]);
 
-  // Measure the collapsible section height
+  // Measure the collapsible section height — temporarily remove constraints to get true height
   useEffect(() => {
-    if (collapseRef.current) {
-      setCollapseHeight(collapseRef.current.scrollHeight);
-    }
-  }, [commit?.hash, commit?.body]);
+    const el = collapseRef.current;
+    if (!el) return;
+    // Remove inline height/overflow so scrollHeight reflects full content
+    const prevHeight = el.style.height;
+    const prevOverflow = el.style.overflow;
+    el.style.height = 'auto';
+    el.style.overflow = 'visible';
+    requestAnimationFrame(() => {
+      if (collapseRef.current) {
+        setCollapseHeight(collapseRef.current.scrollHeight);
+      }
+      // Restore (the render will re-apply the correct values)
+      el.style.height = prevHeight;
+      el.style.overflow = prevOverflow;
+    });
+  }, [commit?.hash, commit?.body, commit?.branches?.length]);
 
   // Listen to scroll on the first scrollable child inside the diff wrapper
   useEffect(() => {
@@ -190,19 +212,30 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   };
 
   const handleCheckout = async () => {
-    const confirmed = await confirm({
+    const hasBuildCmd = !!activeRepo?.buildCommand;
+    const result = await confirmWithCheckbox({
       title: 'Checkout Commit',
       message: `Move the current branch to commit ${truncateHash(commit.hash)}?\n\n"${commit.message}"\n\nThis will reset your branch to this commit. You can then force push to update the remote.`,
       confirmLabel: 'Checkout',
       variant: 'warning',
+      ...(hasBuildCmd && {
+        checkbox: {
+          label: 'Build after checkout',
+          defaultChecked: activeRepo?.autoBuildOnCheckout ?? false,
+        },
+      }),
     });
-    if (!confirmed) return;
+    if (!result.confirmed) return;
     setCheckingOut(true);
     try {
       const { branch } = await api.checkout(repoPath, commit.hash);
-      addToast('success', `Moved ${branch} to ${truncateHash(commit.hash)} — use Force Push to update remote`);
+      addToast('success', `Switched to ${branch} at ${truncateHash(commit.hash)}`);
       await fetchStatus(repoPath);
       await fetchLog(repoPath);
+      if (result.checkboxValue && activeRepo?.buildCommand) {
+        addToast('info', 'Building after checkout...');
+        startBuild(activeRepo.id);
+      }
     } catch (err: any) {
       addToast('error', err.message);
     } finally {
@@ -280,40 +313,56 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
                 <span className="font-mono text-text-muted">{commit.parentHashes.map(h => truncateHash(h)).join(', ')}</span>
               </span>
             )}
-            {(isHead || isUnpushed || !commit.isHead) && (
-              <span className="inline-flex items-center gap-1.5 ml-auto">
-                {!commit.isHead && (
-                  <button
-                    onClick={handleCheckout}
-                    disabled={checkingOut}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-bg-tertiary text-text-secondary border border-border hover:bg-bg-tertiary/80 hover:text-text-primary disabled:opacity-40 transition-colors"
-                  >
-                    {checkingOut ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
-                    Checkout
-                  </button>
-                )}
-                {isUnpushed && (
-                  <button
-                    onClick={handlePushToHere}
-                    disabled={pushing}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-accent/15 text-accent border border-accent/25 hover:bg-accent/25 disabled:opacity-40 transition-colors"
-                  >
-                    {pushing ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
-                    Push to here
-                  </button>
-                )}
-                {isHead && (
-                  <button
-                    onClick={handleUncommit}
-                    disabled={uncommitting}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-warning/15 text-warning border border-warning/25 hover:bg-warning/25 disabled:opacity-40 transition-colors"
-                  >
-                    {uncommitting ? <Loader2 size={11} className="animate-spin" /> : <Undo2 size={11} />}
-                    Uncommit
-                  </button>
-                )}
-              </span>
-            )}
+            {(() => {
+              // Find non-current local branches on this commit that can be merged
+              // Local branches may contain '/' (e.g. feature/xyz) — remote ones start with 'origin/' or 'remotes/'
+              const mergeable = commit.branches.filter(b => !b.startsWith('origin/') && !b.startsWith('remotes/') && b !== status?.current);
+              const showActions = isHead || isUnpushed || !commit.isHead || mergeable.length > 0;
+              if (!showActions) return null;
+              return (
+                <span className="inline-flex items-center gap-1.5 ml-auto flex-wrap">
+                  {mergeable.length > 0 && (
+                    <button
+                      onClick={() => setShowMergeDialog(true)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-accent/15 text-accent border border-accent/25 hover:bg-accent/25 transition-colors"
+                    >
+                      <GitMerge size={11} />
+                      Merge {mergeable[0]} into {status?.current}
+                    </button>
+                  )}
+                  {!commit.isHead && (
+                    <button
+                      onClick={handleCheckout}
+                      disabled={checkingOut}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-bg-tertiary text-text-secondary border border-border hover:bg-bg-tertiary/80 hover:text-text-primary disabled:opacity-40 transition-colors"
+                    >
+                      {checkingOut ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                      Checkout
+                    </button>
+                  )}
+                  {isUnpushed && (
+                    <button
+                      onClick={handlePushToHere}
+                      disabled={pushing}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-accent/15 text-accent border border-accent/25 hover:bg-accent/25 disabled:opacity-40 transition-colors"
+                    >
+                      {pushing ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                      Push to here
+                    </button>
+                  )}
+                  {isHead && (
+                    <button
+                      onClick={handleUncommit}
+                      disabled={uncommitting}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.65rem] font-medium bg-warning/15 text-warning border border-warning/25 hover:bg-warning/25 disabled:opacity-40 transition-colors"
+                    >
+                      {uncommitting ? <Loader2 size={11} className="animate-spin" /> : <Undo2 size={11} />}
+                      Uncommit
+                    </button>
+                  )}
+                </span>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -328,6 +377,14 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
           </div>
         )}
       </div>
+
+      {showMergeDialog && (
+        <MergeDialog
+          repoPath={repoPath}
+          preselectedBranch={commit.branches.find(b => !b.startsWith('origin/') && !b.startsWith('remotes/') && b !== status?.current)}
+          onClose={() => setShowMergeDialog(false)}
+        />
+      )}
     </div>
   );
 }

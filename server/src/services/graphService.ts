@@ -24,6 +24,9 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
   const commitRowMap = new Map<string, number>();
   // Map from lane index to color
   const laneColors = new Map<number, number>();
+  // Track lanes created by branch divergence (NOT merge parents).
+  // These lanes draw a fork-out at the ancestor instead of a merge-in.
+  const branchLanes = new Set<number>();
   let nextColor = 0;
 
   const graphCommits: GraphCommit[] = [];
@@ -34,7 +37,6 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
 
     // Find which lane this commit was expected on
     let lane = activeLanes.indexOf(commit.hash);
-    let branchedFromLane = -1;
 
     if (lane === -1) {
       // Not expected on any lane — this commit is on a side branch.
@@ -45,9 +47,9 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
 
       if (parentOnLane !== undefined && parentOnLane !== -1) {
         // Parent is already reserved on a lane by another commit (the main lineage).
-        // This commit must be on a DIFFERENT branch — give it a new lane and branch out.
+        // This commit must be on a DIFFERENT branch — give it a new lane.
         lane = getFreeLane(activeLanes);
-        branchedFromLane = parentOnLane;
+        branchLanes.add(lane);
       } else {
         lane = getFreeLane(activeLanes);
       }
@@ -66,18 +68,6 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
     const connections: GraphConnection[] = [];
     const laneColor = laneColors.get(lane)!;
 
-    // Draw branch-out connection if this commit diverged from another lane
-    if (branchedFromLane !== -1) {
-      connections.push({
-        fromLane: branchedFromLane,
-        toLane: lane,
-        fromRow: row - 1,
-        toRow: row,
-        type: 'branch-out',
-        colorIndex: laneColor,
-      });
-    }
-
     // Track lanes that existed before this row (for carry-forward)
     const lanesBeforeRow = new Set<number>();
     for (let i = 0; i < activeLanes.length; i++) {
@@ -86,20 +76,49 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
       }
     }
 
-    // Also close any other lanes that were waiting for this same commit (merge point)
+    // Close any other lanes that were waiting for this same commit
     for (let i = 0; i < activeLanes.length; i++) {
       if (i !== lane && activeLanes[i] === commit.hash) {
-        // This lane was also pointing to us — draw a merge-in line
-        connections.push({
-          fromLane: i,
-          toLane: lane,
-          fromRow: row,
-          toRow: row,
-          type: 'merge-in',
-          colorIndex: laneColors.get(i) ?? laneColor,
-        });
+        if (branchLanes.has(i)) {
+          // This is a branch lane (unmerged fork).
+          // Draw a fork-out curve FROM this commit's lane OUT to the branch lane.
+          // This shows the branch originating from this commit (the fork point).
+          connections.push({
+            fromLane: lane,
+            toLane: i,
+            fromRow: row,
+            toRow: row - 1,
+            type: 'branch-out',
+            colorIndex: laneColors.get(i) ?? laneColor,
+          });
+          // Remove the carry-forward straight line from previous row on the branch lane
+          // (the fork-out curve replaces the last segment)
+          if (row > 0) {
+            const prevCommit = graphCommits[row - 1];
+            prevCommit.connections = prevCommit.connections.filter(c =>
+              !(c.fromLane === i && c.toLane === i && c.type === 'straight' && c.toRow === row)
+            );
+          }
+          branchLanes.delete(i);
+        } else {
+          // This is a merge lane — draw a merge-in curve
+          connections.push({
+            fromLane: i,
+            toLane: lane,
+            fromRow: row - 1,
+            toRow: row,
+            type: 'merge-in',
+            colorIndex: laneColors.get(i) ?? laneColor,
+          });
+          if (row > 0) {
+            const prevCommit = graphCommits[row - 1];
+            prevCommit.connections = prevCommit.connections.filter(c =>
+              !(c.fromLane === i && c.toLane === i && c.type === 'straight' && c.toRow === row)
+            );
+          }
+        }
         activeLanes[i] = null;
-        lanesBeforeRow.delete(i); // merged — no carry-forward
+        lanesBeforeRow.delete(i);
       }
     }
 
@@ -129,7 +148,7 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
         let parentLane = activeLanes.indexOf(parentHash);
 
         if (parentLane === -1) {
-          // Assign parent to a new lane
+          // Assign parent to a new lane (this is a merge lane, NOT a branch lane)
           parentLane = getFreeLane(activeLanes);
           activeLanes[parentLane] = parentHash;
 
@@ -137,7 +156,6 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
             laneColors.set(parentLane, nextColor % NUM_COLORS);
             nextColor++;
           }
-          // New lane — don't add to lanesBeforeRow (no carry-forward)
         }
 
         connections.push({
@@ -152,7 +170,6 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
     }
 
     // Carry forward only lanes that existed before this row
-    // (skip newly created merge lanes to avoid ghost trailing lines)
     for (const i of lanesBeforeRow) {
       if (activeLanes[i] !== null) {
         connections.push({

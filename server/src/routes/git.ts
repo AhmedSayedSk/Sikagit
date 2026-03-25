@@ -174,6 +174,34 @@ router.post('/checkout', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: result });
 }));
 
+router.post('/merge', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { sourceBranch } = req.body;
+  if (!sourceBranch) {
+    res.status(400).json({ success: false, error: 'Missing required field: sourceBranch' });
+    return;
+  }
+  const result = await withRepoLock(repoPath, () => gitService.mergeBranch(repoPath, sourceBranch));
+  res.json({ success: true, data: result });
+}));
+
+router.post('/merge/abort', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  await withRepoLock(repoPath, () => gitService.abortMerge(repoPath));
+  res.json({ success: true });
+}));
+
+router.post('/branch/delete', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { branch, force } = req.body;
+  if (!branch) {
+    res.status(400).json({ success: false, error: 'Missing required field: branch' });
+    return;
+  }
+  await withRepoLock(repoPath, () => gitService.deleteBranch(repoPath, branch, force));
+  res.json({ success: true });
+}));
+
 router.post('/discard', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const { files } = req.body;

@@ -25,7 +25,7 @@ export const api = {
     body: JSON.stringify({ path }),
   }),
   deleteRepo: (id: string) => request<void>(`/repos/${id}`, { method: 'DELETE' }),
-  updateRepo: (id: string, data: { name?: string; group?: string; avatar?: string; runCommand?: string; runPort?: number | null; buildCommand?: string }) =>
+  updateRepo: (id: string, data: { name?: string; group?: string; avatar?: string; runCommand?: string; runPort?: number | null; buildCommand?: string; autoBuildOnCheckout?: boolean }) =>
     request<import('@sikagit/shared').RepoBookmark>(`/repos/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -60,6 +60,21 @@ export const api = {
       `/git/graph?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}`
     ),
   getBranches: (repo: string) => request<import('@sikagit/shared').GitBranch[]>(`/git/branches?repo=${encodeURIComponent(repo)}`),
+  mergeBranch: (repo: string, sourceBranch: string) =>
+    request<{ message: string; merged: boolean; conflicts?: string[] }>('/git/merge', {
+      method: 'POST',
+      body: JSON.stringify({ repo, sourceBranch }),
+    }),
+  mergeAbort: (repo: string) =>
+    request<void>('/git/merge/abort', {
+      method: 'POST',
+      body: JSON.stringify({ repo }),
+    }),
+  deleteBranch: (repo: string, branch: string, force?: boolean) =>
+    request<void>('/git/branch/delete', {
+      method: 'POST',
+      body: JSON.stringify({ repo, branch, force }),
+    }),
   getTags: (repo: string) => request<import('@sikagit/shared').GitTag[]>(`/git/tags?repo=${encodeURIComponent(repo)}`),
   getCommitFiles: (repo: string, commit: string) =>
     request<{ path: string; status: string }[]>(`/git/commit-files?repo=${encodeURIComponent(repo)}&commit=${encodeURIComponent(commit)}`),
@@ -170,6 +185,10 @@ export const api = {
   stopBuild: (repoId: string) => request<void>(`/run/${repoId}/build/stop`, { method: 'POST' }),
   buildStatus: (repoId: string) => request<{ running: boolean; runTarget: string }>(`/run/${repoId}/build/status`),
   buildOutput: (repoId: string) => request<{ lines: string[] }>(`/run/${repoId}/build/output`),
+  installDeps: (repoId: string) => request<{ status: string; runTarget: string }>(`/run/${repoId}/install`, { method: 'POST' }),
+  stopInstall: (repoId: string) => request<void>(`/run/${repoId}/install/stop`, { method: 'POST' }),
+  installStatus: (repoId: string) => request<{ running: boolean; runTarget: string }>(`/run/${repoId}/install/status`),
+  installOutput: (repoId: string) => request<{ lines: string[] }>(`/run/${repoId}/install/output`),
 
   // Browse — resolve a folder name + file fingerprint to an absolute server path
   resolveFolder: (folderName: string, files: string[]) =>
