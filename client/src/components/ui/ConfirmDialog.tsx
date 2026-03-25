@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import { useConfirmStore } from '../../store/confirmStore';
 
@@ -6,17 +6,25 @@ export function ConfirmDialog() {
   const options = useConfirmStore(s => s.options);
   const handleConfirm = useConfirmStore(s => s.handleConfirm);
   const handleCancel = useConfirmStore(s => s.handleCancel);
+  const [checkboxChecked, setCheckboxChecked] = useState(false);
+
+  // Reset checkbox when dialog opens
+  useEffect(() => {
+    if (options?.checkbox) {
+      setCheckboxChecked(options.checkbox.defaultChecked ?? false);
+    }
+  }, [options]);
 
   // Close on Escape key
   useEffect(() => {
     if (!options) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleCancel();
-      if (e.key === 'Enter') handleConfirm();
+      if (e.key === 'Enter') handleConfirm(options.checkbox ? checkboxChecked : undefined);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [options, handleCancel, handleConfirm]);
+  }, [options, handleCancel, handleConfirm, checkboxChecked]);
 
   if (!options) return null;
 
@@ -26,6 +34,7 @@ export function ConfirmDialog() {
     confirmLabel = 'Confirm',
     cancelLabel = 'Cancel',
     variant = 'danger',
+    checkbox,
   } = options;
 
   const iconBg = variant === 'info' ? 'bg-accent/10' : variant === 'warning' ? 'bg-warning/10' : 'bg-danger/10';
@@ -51,9 +60,24 @@ export function ConfirmDialog() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-            <p className="text-xs text-text-secondary mt-1 leading-relaxed">{message}</p>
+            <p className="text-xs text-text-secondary mt-1 leading-relaxed whitespace-pre-line">{message}</p>
           </div>
         </div>
+        {checkbox && (
+          <div className="px-4 pb-1">
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={checkboxChecked}
+                onChange={e => setCheckboxChecked(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-border bg-bg-primary accent-accent cursor-pointer"
+              />
+              <span className="text-xs text-text-secondary group-hover:text-text-primary transition-colors">
+                {checkbox.label}
+              </span>
+            </label>
+          </div>
+        )}
         <div className="flex justify-end gap-2 px-4 py-3">
           <button
             onClick={handleCancel}
@@ -62,7 +86,7 @@ export function ConfirmDialog() {
             {cancelLabel}
           </button>
           <button
-            onClick={handleConfirm}
+            onClick={() => handleConfirm(checkbox ? checkboxChecked : undefined)}
             autoFocus
             className={`px-4 py-1.5 rounded text-xs font-medium transition-colors ${confirmColors}`}
           >

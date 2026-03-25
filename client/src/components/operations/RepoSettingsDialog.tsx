@@ -36,6 +36,7 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const [runCommand, setRunCommand] = useState(repo.runCommand || '');
   const [runPort, setRunPort] = useState(repo.runPort?.toString() || '');
   const [buildCommand, setBuildCommand] = useState(repo.buildCommand || '');
+  const [autoBuildOnCheckout, setAutoBuildOnCheckout] = useState(repo.autoBuildOnCheckout || false);
 
   // Git config fields
   const [userName, setUserName] = useState('');
@@ -131,6 +132,7 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
         runCommand: runCommand.trim() || undefined,
         runPort: parsedPort && parsedPort >= 1024 && parsedPort <= 65535 ? parsedPort : null,
         buildCommand: buildCommand.trim() || undefined,
+        autoBuildOnCheckout,
       });
 
       const configs: [string, string][] = [
