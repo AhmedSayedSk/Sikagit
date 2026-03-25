@@ -13,11 +13,12 @@ interface CommitDetailProps {
 }
 
 export function CommitDetail({ repoPath }: CommitDetailProps) {
-  const { commits, selectedCommit, selectCommit, fetchLog } = useLogStore();
+  const { commits, selectedCommit, selectCommit, fetchLog, selectedCommitFile } = useLogStore();
   const fetchStatus = useStatusStore(s => s.fetchStatus);
   const addToast = useToastStore(s => s.addToast);
   const confirm = useConfirmStore(s => s.confirm);
-  const commit = commits.find(c => c.hash === selectedCommit);
+  const isUncommitted = selectedCommit === '__uncommitted__';
+  const commit = isUncommitted ? null : commits.find(c => c.hash === selectedCommit);
   const [diff, setDiff] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [uncommitting, setUncommitting] = useState(false);
@@ -29,12 +30,23 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   const [collapseHeight, setCollapseHeight] = useState<number | null>(null);
   const diffWrapRef = useRef<HTMLDivElement>(null);
 
+  // Fetch diff for uncommitted changes (staged + unstaged combined)
   useEffect(() => {
+    if (isUncommitted) {
+      Promise.all([
+        api.getStagedDiff(repoPath).catch(() => ''),
+        api.getDiff(repoPath).catch(() => ''),
+      ]).then(([staged, unstaged]) => {
+        setDiff([staged, unstaged].filter(Boolean).join('\n'));
+      });
+      setScrollY(0);
+      return;
+    }
     if (commit) {
-      api.getDiff(repoPath, commit.hash).then(setDiff).catch(() => setDiff(''));
+      api.getDiff(repoPath, commit.hash, selectedCommitFile || undefined).then(setDiff).catch(() => setDiff(''));
       setScrollY(0);
     }
-  }, [commit?.hash, repoPath]);
+  }, [isUncommitted, commit?.hash, repoPath, selectedCommitFile]);
 
   // Measure the collapsible section height
   useEffect(() => {
@@ -84,7 +96,43 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
     };
   }, [diff]);
 
-  if (!commit) return null;
+  if (!commit && !isUncommitted) return null;
+
+  // Render simplified view for uncommitted changes
+  if (isUncommitted) {
+    const stagedCount = status?.staged.length || 0;
+    const unstagedCount = (status?.unstaged.length || 0) + (status?.untracked.length || 0);
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex-shrink-0 border-b border-border bg-bg-secondary">
+          <div className="flex items-center justify-between px-3.5 py-1.5 gap-3">
+            <div className="min-w-0 flex-1 flex items-center gap-2">
+              <GitCommitHorizontal size={13} className="text-warning flex-shrink-0" />
+              <p className="text-xs font-semibold text-warning leading-snug">Uncommitted changes</p>
+              <span className="text-[0.65rem] text-text-muted">
+                {stagedCount} staged, {unstagedCount} unstaged
+              </span>
+            </div>
+            <button
+              onClick={() => selectCommit(null)}
+              className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary flex-shrink-0"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+        <div ref={diffWrapRef} className="flex-1 overflow-hidden">
+          {diff ? (
+            <DiffView diff={diff} repoPath={repoPath} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-text-muted text-sm">
+              Loading diff...
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const copyHash = () => {
     navigator.clipboard.writeText(commit.hash);

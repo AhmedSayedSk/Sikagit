@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitCommitHorizontal, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitCommitHorizontal, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning, Sparkles, Loader2 } from 'lucide-react';
 import { getFileIcon } from '../../lib/fileIcons';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
+import type { CommitFile } from '../../store/logStore';
 import { useUIStore } from '../../store/uiStore';
 import { useConfirmStore } from '../../store/confirmStore';
 import { CommitDialog } from '../operations/CommitDialog';
@@ -19,6 +20,38 @@ function getStatusIcon(index: string, workingDir: string) {
   if (index === 'R') return { Icon: FileSymlink, color: 'text-[var(--color-status-renamed)]', label: 'Renamed' };
   if (index === '?') return { Icon: FileQuestion, color: 'text-[var(--color-status-untracked)]', label: 'Untracked' };
   return { Icon: FileQuestion, color: 'text-[var(--color-status-untracked)]', label: 'Unknown' };
+}
+
+function getCommitFileStatusIcon(status: string) {
+  if (status === 'M') return { Icon: FilePen, color: 'text-[var(--color-status-modified)]', label: 'Modified' };
+  if (status === 'A') return { Icon: FilePlus2, color: 'text-[var(--color-status-added)]', label: 'Added' };
+  if (status === 'D') return { Icon: FileX2, color: 'text-[var(--color-status-deleted)]', label: 'Deleted' };
+  if (status === 'R') return { Icon: FileSymlink, color: 'text-[var(--color-status-renamed)]', label: 'Renamed' };
+  return { Icon: FileQuestion, color: 'text-[var(--color-status-untracked)]', label: status };
+}
+
+function CommitFileRow({ file, isActive, onClick }: {
+  file: CommitFile;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const { Icon: StatusIcon, color, label } = getCommitFileStatusIcon(file.status);
+  const { Icon: TypeIcon, color: typeColor, label: typeLabel } = getFileIcon(file.path);
+  return (
+    <div
+      className={cn(
+        'group flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer',
+        isActive
+          ? 'bg-accent-emphasis/20 text-text-primary'
+          : 'hover:bg-bg-tertiary/30'
+      )}
+      onClick={onClick}
+    >
+      <span title={label} className="flex-shrink-0"><StatusIcon size={13} className={color} /></span>
+      <span title={typeLabel} className="flex-shrink-0" style={{ color: typeColor }}><TypeIcon size={13} /></span>
+      <span className="flex-1 truncate">{file.path}</span>
+    </div>
+  );
 }
 
 interface FolderGroup {
@@ -125,6 +158,12 @@ interface FileStatusPanelProps {
 
 export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const { status, fetchStatus, selectedFile, selectedFileSource, selectFile } = useStatusStore();
+  const selectedCommit = useLogStore(s => s.selectedCommit);
+  const commitFiles = useLogStore(s => s.commitFiles);
+  const commitFilesLoading = useLogStore(s => s.commitFilesLoading);
+  const selectedCommitFile = useLogStore(s => s.selectedCommitFile);
+  const fetchCommitFiles = useLogStore(s => s.fetchCommitFiles);
+  const selectCommitFile = useLogStore(s => s.selectCommitFile);
   const selectCommit = useLogStore(s => s.selectCommit);
   const stagedOpen = true;
   const unstagedOpen = true;
@@ -166,6 +205,13 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     const interval = setInterval(() => fetchStatus(repoPath), 3000);
     return () => clearInterval(interval);
   }, [repoPath, fetchStatus]);
+
+  // Fetch commit files when a commit is selected
+  useEffect(() => {
+    if (selectedCommit) {
+      fetchCommitFiles(repoPath, selectedCommit);
+    }
+  }, [selectedCommit, repoPath, fetchCommitFiles]);
 
   const handleSelectFile = useCallback(async (file: GitFileStatus | null, source: 'staged' | 'unstaged') => {
     if (file && file.size && file.size >= 1024 * 1024) {
@@ -275,6 +321,40 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   }
 
   const stagedFiles = status.staged;
+
+  // When a real commit is selected (not uncommitted), show its changed files
+  if (selectedCommit && selectedCommit !== '__uncommitted__') {
+    return (
+      <div className="flex flex-col h-full overflow-hidden border-t border-border">
+        <div className="flex items-center justify-between px-3 py-1.5 bg-bg-secondary text-xs font-medium text-text-secondary flex-shrink-0">
+          <div className="flex items-center gap-1">
+            <GitCommitHorizontal size={11} className="text-accent" />
+            Changed Files ({commitFiles.length})
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {commitFilesLoading ? (
+            <div className="flex items-center justify-center py-8 text-text-muted">
+              <Loader2 size={16} className="animate-spin" />
+            </div>
+          ) : commitFiles.length === 0 ? (
+            <div className="flex items-center justify-center py-8 text-text-muted text-xs">
+              No files changed
+            </div>
+          ) : (
+            commitFiles.map(f => (
+              <CommitFileRow
+                key={f.path}
+                file={f}
+                isActive={selectedCommitFile === f.path}
+                onClick={() => selectCommitFile(selectedCommitFile === f.path ? null : f.path)}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="flex h-full overflow-hidden border-t border-border">

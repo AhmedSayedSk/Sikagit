@@ -60,6 +60,17 @@ router.get('/graph', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: graph });
 }));
 
+router.get('/commit-files', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const commit = req.query.commit as string;
+  if (!commit) {
+    res.status(400).json({ success: false, error: 'Missing commit hash' });
+    return;
+  }
+  const files = await withRepoLock(repoPath, () => gitService.getCommitFiles(repoPath, commit));
+  res.json({ success: true, data: files });
+}));
+
 router.get('/branches', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const branches = await withRepoLock(repoPath, () => gitService.getBranches(repoPath));

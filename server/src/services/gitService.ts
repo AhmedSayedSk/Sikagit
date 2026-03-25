@@ -368,6 +368,16 @@ function generateUntrackedDiff(repoPath: string, filePath: string): string {
   }
 }
 
+export async function getCommitFiles(repoPath: string, commitHash: string): Promise<{ path: string; status: string }[]> {
+  const normalized = normalizePath(repoPath);
+  const output = execSync(`git diff-tree --no-commit-id -r --name-status ${commitHash}`, { cwd: normalized }).toString().trim();
+  if (!output) return [];
+  return output.split('\n').map(line => {
+    const [status, ...pathParts] = line.split('\t');
+    return { path: pathParts.join('\t'), status: status.charAt(0) };
+  });
+}
+
 export async function getStagedDiff(repoPath: string, filePath?: string): Promise<string> {
   const git = getGit(repoPath);
   const args = ['--cached'];

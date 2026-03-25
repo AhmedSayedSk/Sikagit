@@ -102,10 +102,17 @@ export function CommitList({ repoPath }: CommitListProps) {
         {hasUncommitted && (
           <div
             className={cn(
-              'relative flex items-center h-7 px-3 text-xs cursor-default border-b border-border/30',
-              'bg-warning/8 text-warning'
+              'relative flex items-center h-7 px-3 text-xs cursor-pointer border-b border-border/30 transition-colors',
+              selectedCommit === '__uncommitted__'
+                ? 'bg-warning/20 text-warning'
+                : 'bg-warning/8 text-warning hover:bg-warning/12'
             )}
             style={{ height: ROW_HEIGHT }}
+            onClick={() => {
+              const next = selectedCommit === '__uncommitted__' ? null : '__uncommitted__';
+              selectCommit(next);
+              if (next) selectFile(null);
+            }}
           >
             {commits[0] && (
               <UncommittedNode

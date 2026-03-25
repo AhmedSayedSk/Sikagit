@@ -61,6 +61,8 @@ export const api = {
     ),
   getBranches: (repo: string) => request<import('@sikagit/shared').GitBranch[]>(`/git/branches?repo=${encodeURIComponent(repo)}`),
   getTags: (repo: string) => request<import('@sikagit/shared').GitTag[]>(`/git/tags?repo=${encodeURIComponent(repo)}`),
+  getCommitFiles: (repo: string, commit: string) =>
+    request<{ path: string; status: string }[]>(`/git/commit-files?repo=${encodeURIComponent(repo)}&commit=${encodeURIComponent(commit)}`),
   getDiff: (repo: string, commit?: string, file?: string) => {
     const params = new URLSearchParams({ repo });
     if (commit) params.set('commit', commit);

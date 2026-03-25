@@ -2,16 +2,26 @@ import { create } from 'zustand';
 import type { GraphCommit } from '@sikagit/shared';
 import { api } from '../lib/api';
 
+export interface CommitFile {
+  path: string;
+  status: string;
+}
+
 interface LogState {
   commits: GraphCommit[];
   totalLanes: number;
   loading: boolean;
   error: string | null;
   selectedCommit: string | null;
+  commitFiles: CommitFile[];
+  commitFilesLoading: boolean;
+  selectedCommitFile: string | null;
   hasMore: boolean;
   fetchLog: (repo: string, reset?: boolean) => Promise<void>;
   loadMore: (repo: string) => Promise<void>;
   selectCommit: (hash: string | null) => void;
+  fetchCommitFiles: (repo: string, commit: string) => Promise<void>;
+  selectCommitFile: (path: string | null) => void;
 }
 
 export const useLogStore = create<LogState>()((set, get) => ({
@@ -20,6 +30,9 @@ export const useLogStore = create<LogState>()((set, get) => ({
   loading: false,
   error: null,
   selectedCommit: null,
+  commitFiles: [],
+  commitFilesLoading: false,
+  selectedCommitFile: null,
   hasMore: true,
 
   fetchLog: async (repo: string, reset = true) => {
@@ -55,5 +68,21 @@ export const useLogStore = create<LogState>()((set, get) => ({
     }
   },
 
-  selectCommit: (hash: string | null) => set({ selectedCommit: hash }),
+  selectCommit: (hash: string | null) => set({
+    selectedCommit: hash,
+    commitFiles: [],
+    selectedCommitFile: null,
+  }),
+
+  fetchCommitFiles: async (repo: string, commit: string) => {
+    set({ commitFilesLoading: true });
+    try {
+      const files = await api.getCommitFiles(repo, commit);
+      set({ commitFiles: files, commitFilesLoading: false });
+    } catch {
+      set({ commitFiles: [], commitFilesLoading: false });
+    }
+  },
+
+  selectCommitFile: (path: string | null) => set({ selectedCommitFile: path }),
 }));
