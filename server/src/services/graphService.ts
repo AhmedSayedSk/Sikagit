@@ -34,20 +34,20 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
 
     // Find which lane this commit was expected on
     let lane = activeLanes.indexOf(commit.hash);
+    let branchedFromLane = -1;
 
     if (lane === -1) {
-      // Not expected on any lane — could be an orphaned reflog commit.
+      // Not expected on any lane — this commit is on a side branch.
       // Check if any of this commit's parents are already expected on a lane.
-      // If so, reuse that lane to keep the graph linear.
       const parentOnLane = commit.parentHashes
         .map(ph => activeLanes.indexOf(ph))
         .find(idx => idx !== -1);
 
       if (parentOnLane !== undefined && parentOnLane !== -1) {
-        // Insert before the parent on the same lane
-        lane = parentOnLane;
-        // The lane was waiting for our parent; now it should wait for us first
-        // (we'll set it to our parent below in the parent processing)
+        // Parent is already reserved on a lane by another commit (the main lineage).
+        // This commit must be on a DIFFERENT branch — give it a new lane and branch out.
+        lane = getFreeLane(activeLanes);
+        branchedFromLane = parentOnLane;
       } else {
         lane = getFreeLane(activeLanes);
       }
@@ -65,6 +65,18 @@ export function computeGraph(commits: GitCommit[]): { commits: GraphCommit[]; to
 
     const connections: GraphConnection[] = [];
     const laneColor = laneColors.get(lane)!;
+
+    // Draw branch-out connection if this commit diverged from another lane
+    if (branchedFromLane !== -1) {
+      connections.push({
+        fromLane: branchedFromLane,
+        toLane: lane,
+        fromRow: row - 1,
+        toRow: row,
+        type: 'branch-out',
+        colorIndex: laneColor,
+      });
+    }
 
     // Track lanes that existed before this row (for carry-forward)
     const lanesBeforeRow = new Set<number>();

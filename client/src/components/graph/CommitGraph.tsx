@@ -106,8 +106,8 @@ function ConnectionLine({ conn, row }: { conn: GraphConnection; row: number }) {
   const color = getColor(conn.colorIndex);
   const fromX = laneX(conn.fromLane);
   const toX = laneX(conn.toLane);
-  const fromY = rowY(row);
-  const toY = rowY(row + 1);
+  const fromY = rowY(conn.fromRow);
+  const toY = rowY(conn.toRow);
 
   if (conn.type === 'straight' && conn.fromLane === conn.toLane) {
     // Simple vertical line
@@ -124,15 +124,14 @@ function ConnectionLine({ conn, row }: { conn: GraphConnection; row: number }) {
     );
   }
 
-  if (conn.type === 'merge-in' && conn.fromRow === conn.toRow) {
+  if ((conn.type === 'merge-in') && conn.fromRow === conn.toRow) {
     // Horizontal merge into node (same row)
-    const midY = rowY(row);
     return (
       <line
         x1={fromX}
-        y1={midY}
+        y1={fromY}
         x2={toX}
-        y2={midY}
+        y2={toY}
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
