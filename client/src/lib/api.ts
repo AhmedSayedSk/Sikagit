@@ -101,6 +101,9 @@ export const api = {
   }),
 
   // Operations
+  removeLock: (repo: string) => request<{ removed: boolean }>(`/git/lock?repo=${encodeURIComponent(repo)}`, {
+    method: 'DELETE',
+  }),
   stageFiles: (repo: string, files: string[]) => request<void>('/git/stage', {
     method: 'POST',
     body: JSON.stringify({ repo, files }),
