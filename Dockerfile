@@ -2,7 +2,7 @@
 # Base stage — shared deps
 # ============================================
 FROM node:22-alpine AS base
-RUN apk add --no-cache git openssh-client python3 make g++ && git config --global safe.directory '*'
+RUN apk add --no-cache git openssh-client python3 make g++ ffmpeg && git config --global safe.directory '*'
 WORKDIR /app
 
 # Copy workspace root + all package.json files
