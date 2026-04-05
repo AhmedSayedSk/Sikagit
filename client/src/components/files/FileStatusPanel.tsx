@@ -10,6 +10,7 @@ import { CommitDialog } from '../operations/CommitDialog';
 import { SmartCommitDialog } from '../operations/SmartCommitDialog';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import { useToastStore } from '../../store/toastStore';
 import type { GitFileStatus } from '@sikagit/shared';
 
 function getStatusIcon(index: string, workingDir: string) {
@@ -171,6 +172,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const confirm = useConfirmStore(s => s.confirm);
+  const addToast = useToastStore(s => s.addToast);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [smartCommitOpen, setSmartCommitOpen] = useState(false);
   const { aiEnabled, aiApiKey } = useUIStore();
@@ -238,6 +240,26 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     }
   }, [selectedFile, selectedFileSource, selectFile]);
 
+  const handleGitError = (err: unknown, retryFn: () => Promise<void>) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('index.lock')) {
+      addToast('error', 'Git lock file exists. Another process may have crashed.', {
+        label: 'Remove Lock',
+        onClick: async () => {
+          try {
+            await api.removeLock(repoPath);
+            addToast('success', 'Lock file removed. Please retry your operation.');
+            await refresh();
+          } catch {
+            addToast('error', 'Failed to remove lock file.');
+          }
+        },
+      });
+    } else {
+      addToast('error', msg);
+    }
+  };
+
   const stageFile = async (file: GitFileStatus) => {
     if (file.size && file.size >= 1024 * 1024) {
       const confirmed = await confirm({
@@ -248,42 +270,66 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
       });
       if (!confirmed) return;
     }
-    selectNextInList(unstagedFiles, file.path, 'unstaged');
-    await api.stageFiles(repoPath, [file.path]);
-    await refresh();
+    try {
+      selectNextInList(unstagedFiles, file.path, 'unstaged');
+      await api.stageFiles(repoPath, [file.path]);
+      await refresh();
+    } catch (err) {
+      handleGitError(err, () => stageFile(file));
+    }
   };
 
   const unstageFile = async (file: string) => {
-    selectNextInList(status?.staged ?? [], file, 'staged');
-    await api.unstageFiles(repoPath, [file]);
-    await refresh();
+    try {
+      selectNextInList(status?.staged ?? [], file, 'staged');
+      await api.unstageFiles(repoPath, [file]);
+      await refresh();
+    } catch (err) {
+      handleGitError(err, () => unstageFile(file));
+    }
   };
 
   const stageAll = async () => {
     if (!status) return;
-    selectFile(null);
-    const files = [...status.unstaged.map(f => f.path), ...status.untracked.map(f => f.path)];
-    await api.stageFiles(repoPath, files);
-    await refresh();
+    try {
+      selectFile(null);
+      const files = [...status.unstaged.map(f => f.path), ...status.untracked.map(f => f.path)];
+      await api.stageFiles(repoPath, files);
+      await refresh();
+    } catch (err) {
+      handleGitError(err, () => stageAll());
+    }
   };
 
   const unstageAll = async () => {
     if (!status) return;
-    selectFile(null);
-    await api.unstageFiles(repoPath, status.staged.map(f => f.path));
-    await refresh();
+    try {
+      selectFile(null);
+      await api.unstageFiles(repoPath, status.staged.map(f => f.path));
+      await refresh();
+    } catch (err) {
+      handleGitError(err, () => unstageAll());
+    }
   };
 
   const discardFile = async (file: string) => {
-    selectNextInList(unstagedFiles, file, 'unstaged');
-    await api.discardChanges(repoPath, [file]);
-    await refresh();
+    try {
+      selectNextInList(unstagedFiles, file, 'unstaged');
+      await api.discardChanges(repoPath, [file]);
+      await refresh();
+    } catch (err) {
+      handleGitError(err, () => discardFile(file));
+    }
   };
 
   const deleteFile = async (file: string) => {
-    selectNextInList(unstagedFiles, file, 'unstaged');
-    await api.deleteUntrackedFiles(repoPath, [file]);
-    await refresh();
+    try {
+      selectNextInList(unstagedFiles, file, 'unstaged');
+      await api.deleteUntrackedFiles(repoPath, [file]);
+      await refresh();
+    } catch (err) {
+      handleGitError(err, () => deleteFile(file));
+    }
   };
 
   const toggleUnstagedFolder = useCallback((folder: string) => {

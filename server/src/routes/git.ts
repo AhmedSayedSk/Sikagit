@@ -302,4 +302,18 @@ router.get('/file', asyncHandler(async (req: Request, res: Response) => {
   res.send(content);
 }));
 
+// Remove stale .git/index.lock
+router.delete('/lock', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const fs = await import('fs');
+  const path = await import('path');
+  const lockFile = path.join(repoPath, '.git', 'index.lock');
+  if (fs.existsSync(lockFile)) {
+    fs.unlinkSync(lockFile);
+    res.json({ success: true, data: { removed: true } });
+  } else {
+    res.json({ success: true, data: { removed: false } });
+  }
+}));
+
 export default router;
