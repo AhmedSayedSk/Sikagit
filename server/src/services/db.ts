@@ -196,9 +196,9 @@ export function updateRepo(id: string, data: Partial<RepoBookmark>): RepoBookmar
   if (data.name !== undefined) { sets.push('name = @name'); params.name = data.name; }
   if (data.group !== undefined) { sets.push('"group" = @group'); params.group = data.group; }
   if (data.avatar !== undefined) { sets.push('avatar = @avatar'); params.avatar = data.avatar; }
-  if (data.runCommand !== undefined) { sets.push('run_command = @runCommand'); params.runCommand = data.runCommand; }
+  if (data.runCommand !== undefined) { sets.push('run_command = @runCommand'); params.runCommand = data.runCommand || null; }
   if (data.runPort !== undefined) { sets.push('run_port = @runPort'); params.runPort = data.runPort; }
-  if (data.buildCommand !== undefined) { sets.push('build_command = @buildCommand'); params.buildCommand = data.buildCommand; }
+  if (data.buildCommand !== undefined) { sets.push('build_command = @buildCommand'); params.buildCommand = data.buildCommand || null; }
   if (data.autoBuildOnCheckout !== undefined) { sets.push('auto_build_on_checkout = @autoBuildOnCheckout'); params.autoBuildOnCheckout = data.autoBuildOnCheckout ? 1 : 0; }
   if (data.lastOpened !== undefined) { sets.push('last_opened = @lastOpened'); params.lastOpened = data.lastOpened; }
 

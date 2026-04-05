@@ -129,9 +129,9 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
       await updateRepo(repo.id, {
         name: name.trim() || repo.name,
         avatar: selectedIcon || undefined,
-        runCommand: runCommand.trim() || undefined,
+        runCommand: runCommand.trim(),
         runPort: parsedPort && parsedPort >= 1024 && parsedPort <= 65535 ? parsedPort : null,
-        buildCommand: buildCommand.trim() || undefined,
+        buildCommand: buildCommand.trim(),
         autoBuildOnCheckout,
       });
 
