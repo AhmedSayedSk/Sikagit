@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Trash2, ExternalLink, ChevronDown, ChevronUp, Square } from 'lucide-react';
+import { X, Trash2, ExternalLink, ChevronDown, ChevronUp, Square, Maximize2, Minimize2 } from 'lucide-react';
 import { useRunStore } from '../../store/runStore';
 import { parseAnsi } from '../../lib/ansi';
 
@@ -71,6 +71,7 @@ export function RunOutput({ repoId, command, onClose }: RunOutputProps) {
   const clearBuildOutput = useRunStore(s => s.clearBuildOutput);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const isBuild = repoId.startsWith('build:');
   const actualRepoId = isBuild ? repoId.slice(6) : repoId;
@@ -80,6 +81,16 @@ export function RunOutput({ repoId, command, onClose }: RunOutputProps) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [outputs, collapsed]);
+
+  // Escape key exits fullscreen
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
 
   const handleStop = () => {
     if (isBuild) stopBuild(actualRepoId);
@@ -100,7 +111,7 @@ export function RunOutput({ repoId, command, onClose }: RunOutputProps) {
   const envLabel = runTarget === 'wsl' ? 'WSL' : 'WIN';
 
   return (
-    <div className="flex flex-col bg-[#1a1a2e]">
+    <div className={`flex flex-col bg-[#1a1a2e] ${fullscreen ? 'fixed inset-0 z-50' : ''}`} style={fullscreen ? { transition: 'all 0.2s ease' } : undefined}>
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-1.5 bg-bg-secondary border-b border-border flex-shrink-0 cursor-pointer select-none"
@@ -173,7 +184,14 @@ export function RunOutput({ repoId, command, onClose }: RunOutputProps) {
             <Trash2 size={11} />
           </button>
           <button
-            onClick={handleClose}
+            onClick={() => { setFullscreen(f => !f); if (collapsed) setCollapsed(false); }}
+            className="p-0.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+            title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {fullscreen ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+          </button>
+          <button
+            onClick={() => { if (fullscreen) setFullscreen(false); handleClose(); }}
             className="p-0.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
             title="Close"
           >
@@ -184,7 +202,7 @@ export function RunOutput({ repoId, command, onClose }: RunOutputProps) {
 
       {/* Output (collapsible) */}
       {!collapsed && (
-        <div ref={scrollRef} className="overflow-auto p-2 font-mono text-xs leading-relaxed text-[#c8d3f5]" style={{ height: 200 }}>
+        <div ref={scrollRef} className={`overflow-auto p-2 font-mono text-xs leading-relaxed text-[#c8d3f5] ${fullscreen ? 'flex-1' : ''}`} style={fullscreen ? undefined : { height: 200 }}>
           {outputs.map((line, i) => (
             <AnsiLine key={i} text={line} />
           ))}
