@@ -204,7 +204,7 @@ function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onSta
 
       {/* Diff lines — only rendered when near viewport */}
       {visible ? (
-        <table className="w-full border-collapse font-mono tracking-tight table-fixed" style={{ fontSize: diffFontSize, lineHeight: `${diffFontSize + diffLineHeight}px` }}>
+        <table className="w-full border-collapse font-mono tracking-tight" style={{ fontSize: diffFontSize, lineHeight: `${diffFontSize + diffLineHeight}px` }}>
           <colgroup>
             <col style={{ width: '2rem' }} />
             <col style={{ width: '2rem' }} />
@@ -223,7 +223,7 @@ function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onSta
                 <td className={`text-center select-none ${markerStyles[line.type]}`}>
                   {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ''}
                 </td>
-                <td className="px-1.5 whitespace-pre overflow-hidden text-ellipsis tracking-tight">
+                <td className="px-1.5 whitespace-pre tracking-tight">
                   {line.content}
                 </td>
               </tr>

@@ -85,6 +85,10 @@ export function MainContent() {
   }, []);
 
   useEffect(() => {
+    // Close the changes panel when switching repos
+    selectCommit(null);
+    selectFile(null);
+
     if (repo) {
       fetchLog(repo.path);
       fetchAll(repo.path);
@@ -92,7 +96,7 @@ export function MainContent() {
       if (repo.buildCommand) checkBuildStatus(repo.id);
       checkInstallStatus(repo.id);
     }
-  }, [repo?.id, fetchLog, fetchAll, checkStatus, checkBuildStatus, checkInstallStatus]);
+  }, [repo?.id, fetchLog, fetchAll, checkStatus, checkBuildStatus, checkInstallStatus, selectCommit, selectFile]);
 
   const handleCommitListResize = useCallback((delta: number) => {
     setCommitListWidth(commitListWidth + delta);
@@ -246,6 +250,7 @@ export function MainContent() {
         <span className="text-xs text-text-secondary flex-1">{repo.displayPath}</span>
 
         {/* Install, Run & Build — combined group */}
+        {(repo.runCommand || repo.buildCommand) && (
         <div className="flex items-center border border-border rounded-lg overflow-hidden">
           {/* Install */}
           <button
@@ -344,6 +349,7 @@ export function MainContent() {
               </button>
             )}
           </div>
+        )}
 
         {/* Remote actions */}
         {status && hasRemote && (
