@@ -65,6 +65,49 @@ ${truncateDiff(diff)}`;
   }
 }
 
+export async function suggestSaveForLater(
+  apiKey: string,
+  model: string,
+  files: string[],
+  diff: string
+): Promise<{ branchName: string; message: string }> {
+  const prompt = `You are a Git expert. Analyze these unstaged files and their diffs to suggest a branch name and a comprehensive commit message for shelving them.
+
+Rules:
+- Branch name: use "save/" prefix, lowercase, kebab-case, max 50 chars, descriptive of what the files relate to (e.g. "save/user-auth-refactor", "save/new-dashboard-layout")
+- Message: write a detailed multi-line commit message with this structure:
+  - First line: summary in imperative mood, max 72 chars (e.g. "Shelve authentication refactor work in progress")
+  - Empty line
+  - A "Changes:" section listing what was done in each file or group of related files:
+    - For each file or logical group, describe the specific changes (functions added/modified, components created, config changes, etc.)
+    - Mention if a file is newly created, modified, or deleted
+  - An empty line, then a "Context:" section with 1-2 sentences about:
+    - The overall purpose/feature these changes were intended for
+    - Current state (incomplete, experimental, prototype, ready but deferred, etc.)
+    - Any important notes for when revisiting later
+- Be specific about what changed — mention function names, component names, config keys, etc.
+- Use the actual diff content to describe changes accurately, not just file names
+
+Files being shelved:
+${files.join('\n')}
+
+Diff of changes:
+${truncateDiff(diff)}
+
+Return JSON: { "branchName": "save/...", "message": "the full multi-line message with \\n for newlines" }`;
+
+  const text = await callGemini(apiKey, model, prompt);
+  try {
+    const result = JSON.parse(text);
+    return {
+      branchName: (result.branchName || 'save/changes').replace(/[^a-zA-Z0-9/_-]/g, '-').toLowerCase(),
+      message: result.message || `Save for later: ${files.length} files`,
+    };
+  } catch {
+    throw new Error('Failed to parse AI response');
+  }
+}
+
 export interface CommitGroup {
   files: string[];
   title: string;

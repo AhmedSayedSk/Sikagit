@@ -1,9 +1,9 @@
 import { useRef, useCallback, useState } from 'react';
-import { GitMerge, GitBranch, Trash2 } from 'lucide-react';
+import { GitMerge, GitBranch, Trash2, Archive } from 'lucide-react';
 import type { GraphCommit } from '@sikagit/shared';
 import { cn, formatDate, truncateHash, detectCommitType } from '../../lib/utils';
 
-export type BranchAction = 'merge' | 'checkout' | 'delete';
+export type BranchAction = 'merge' | 'checkout' | 'delete' | 'unshelve';
 
 interface CommitRowProps {
   commit: GraphCommit;
@@ -64,17 +64,21 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
           {commit.branches.length > 0 && (
             commit.branches.map(b => {
               const isRemote = b.startsWith('origin/') || b.startsWith('remotes/');
+              const isShelved = b.startsWith('save/');
               return (
                 <span
                   key={b}
                   onContextMenu={e => handleBranchContext(e, b)}
                   className={cn(
-                    'inline-flex items-center px-1.5 py-0 rounded text-[0.625rem] font-medium mr-1 cursor-context-menu',
-                    isRemote
-                      ? 'bg-danger/10 text-danger border border-danger/20'
-                      : 'bg-success/10 text-success border border-success/20'
+                    'inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[0.625rem] font-medium mr-1 cursor-context-menu',
+                    isShelved
+                      ? 'bg-accent/10 text-accent border border-accent/20'
+                      : isRemote
+                        ? 'bg-danger/10 text-danger border border-danger/20'
+                        : 'bg-success/10 text-success border border-success/20'
                   )}
                 >
+                  {isShelved && <Archive size={9} className="flex-shrink-0" />}
                   {b}
                 </span>
               );
@@ -126,6 +130,18 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
             className="fixed z-[101] bg-bg-secondary border border-border rounded-lg shadow-xl py-1 min-w-[180px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
+            {contextMenu.branch.startsWith('save/') && (
+              <>
+                <button
+                  onClick={() => handleAction('unshelve')}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-accent hover:bg-accent/10 transition-colors"
+                >
+                  <Archive size={12} />
+                  Restore shelved changes
+                </button>
+                <div className="my-1 border-t border-border" />
+              </>
+            )}
             <button
               onClick={() => handleAction('merge')}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text-primary hover:bg-bg-tertiary transition-colors"

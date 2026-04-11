@@ -12,11 +12,15 @@ interface StatusState {
   error: string | null;
   selectedFile: string | null;
   selectedFileSource: SelectedFileSource | null;
+  checkedFiles: Set<string>;
   fetchStatus: (repo: string) => Promise<void>;
   fetchBranches: (repo: string) => Promise<void>;
   fetchTags: (repo: string) => Promise<void>;
   fetchAll: (repo: string) => Promise<void>;
   selectFile: (path: string | null, source?: SelectedFileSource) => void;
+  toggleFileCheck: (path: string) => void;
+  setCheckedFiles: (paths: string[]) => void;
+  clearChecked: () => void;
 }
 
 export const useStatusStore = create<StatusState>()((set) => ({
@@ -27,6 +31,7 @@ export const useStatusStore = create<StatusState>()((set) => ({
   error: null,
   selectedFile: null,
   selectedFileSource: null,
+  checkedFiles: new Set<string>(),
 
   fetchStatus: async (repo: string) => {
     try {
@@ -73,4 +78,15 @@ export const useStatusStore = create<StatusState>()((set) => ({
     selectedFile: path,
     selectedFileSource: source ?? null,
   }),
+
+  toggleFileCheck: (path) => set((state) => {
+    const next = new Set(state.checkedFiles);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    return { checkedFiles: next };
+  }),
+
+  setCheckedFiles: (paths) => set({ checkedFiles: new Set(paths) }),
+
+  clearChecked: () => set({ checkedFiles: new Set<string>() }),
 }));

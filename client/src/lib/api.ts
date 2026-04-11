@@ -132,6 +132,11 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo, files }),
   }),
+  saveForLater: (repo: string, files: string[], branchName: string, message: string) =>
+    request<{ branch: string; commitHash: string }>('/git/save-for-later', {
+      method: 'POST',
+      body: JSON.stringify({ repo, files, branchName, message }),
+    }),
 
   // Git config
   getGitConfig: (repo: string) => request<import('@sikagit/shared').RepoConfig>(`/git/config?repo=${encodeURIComponent(repo)}`),
@@ -165,6 +170,11 @@ export const api = {
     request<{ title: string; description: string }>('/ai/suggest', {
       method: 'POST',
       body: JSON.stringify({ repo, apiKey, model }),
+    }),
+  aiSuggestSaveForLater: (repo: string, apiKey: string, model: string, files: string[]) =>
+    request<{ branchName: string; message: string }>('/ai/suggest-save-for-later', {
+      method: 'POST',
+      body: JSON.stringify({ repo, apiKey, model, files }),
     }),
   aiSmartCommitPreview: (repo: string, apiKey: string, model: string) =>
     request<{ groups: { files: string[]; title: string; description: string }[] }>('/ai/smart-commit/preview', {

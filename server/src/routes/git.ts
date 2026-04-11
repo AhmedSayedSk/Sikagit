@@ -224,6 +224,27 @@ router.post('/delete-untracked', asyncHandler(async (req: Request, res: Response
   res.json({ success: true });
 }));
 
+router.post('/save-for-later', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { files, branchName, message } = req.body;
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    res.status(400).json({ success: false, error: 'Missing required field: files (non-empty array)' });
+    return;
+  }
+  if (!branchName || typeof branchName !== 'string') {
+    res.status(400).json({ success: false, error: 'Missing required field: branchName (string)' });
+    return;
+  }
+  if (!message || typeof message !== 'string') {
+    res.status(400).json({ success: false, error: 'Missing required field: message (string)' });
+    return;
+  }
+  const result = await withRepoLock(repoPath, () =>
+    gitService.saveForLater(repoPath, files, branchName, message)
+  );
+  res.json({ success: true, data: result });
+}));
+
 router.get('/config', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const config = await gitService.getConfig(repoPath);
