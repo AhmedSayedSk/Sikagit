@@ -387,7 +387,15 @@ export async function getDiff(
   const args: string[] = [];
 
   if (commitHash) {
-    args.push(`${commitHash}~1`, commitHash);
+    // Root commits have no parent, so `commitHash~1` errors out. Detect that
+    // case and diff against Git's canonical empty tree instead.
+    const parents = execSync(`git rev-list --parents -n 1 ${commitHash}`, {
+      cwd: normalizePath(repoPath),
+      encoding: 'utf-8',
+    }).trim().split(/\s+/);
+    const hasParent = parents.length > 1;
+    const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+    args.push(hasParent ? `${commitHash}~1` : EMPTY_TREE, commitHash);
   }
 
   if (filePath) {
