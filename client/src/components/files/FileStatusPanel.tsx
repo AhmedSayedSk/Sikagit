@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitCommitHorizontal, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning, Sparkles, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw, Trash2, Folder, GitCommitHorizontal, FilePlus2, FilePen, FileX2, FileSymlink, FileQuestion, FileWarning, Sparkles, Loader2, Archive } from 'lucide-react';
 import { getFileIcon } from '../../lib/fileIcons';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
@@ -8,6 +8,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useConfirmStore } from '../../store/confirmStore';
 import { CommitDialog } from '../operations/CommitDialog';
 import { SmartCommitDialog } from '../operations/SmartCommitDialog';
+import { SaveForLaterDialog } from '../operations/SaveForLaterDialog';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { useToastStore } from '../../store/toastStore';
@@ -90,12 +91,14 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function FileRow({ file, isActive, onClick, actions, showFullPath }: {
+function FileRow({ file, isActive, onClick, actions, showFullPath, checked, onCheck }: {
   file: GitFileStatus;
   isActive: boolean;
   onClick: () => void;
   actions: React.ReactNode;
   showFullPath?: boolean;
+  checked?: boolean;
+  onCheck?: () => void;
 }) {
   const { Icon: StatusIcon, color, label } = getStatusIcon(file.index, file.workingDir);
   const { Icon: TypeIcon, color: typeColor, label: typeLabel } = getFileIcon(file.path);
@@ -109,6 +112,15 @@ function FileRow({ file, isActive, onClick, actions, showFullPath }: {
       )}
       onClick={onClick}
     >
+      {onCheck !== undefined && (
+        <input
+          type="checkbox"
+          checked={checked ?? false}
+          onChange={e => { e.stopPropagation(); onCheck(); }}
+          onClick={e => e.stopPropagation()}
+          className="w-3 h-3 rounded border-border accent-accent cursor-pointer flex-shrink-0"
+        />
+      )}
       <span title={label} className="flex-shrink-0"><StatusIcon size={13} className={color} /></span>
       <span title={typeLabel} className="flex-shrink-0" style={{ color: typeColor }}><TypeIcon size={13} /></span>
       <span className="flex-1 truncate">{showFullPath ? file.path : fileName(file.path)}</span>
@@ -158,7 +170,7 @@ interface FileStatusPanelProps {
 }
 
 export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
-  const { status, fetchStatus, selectedFile, selectedFileSource, selectFile } = useStatusStore();
+  const { status, fetchStatus, selectedFile, selectedFileSource, selectFile, checkedFiles, toggleFileCheck, setCheckedFiles, clearChecked } = useStatusStore();
   const selectedCommit = useLogStore(s => s.selectedCommit);
   const commitFiles = useLogStore(s => s.commitFiles);
   const commitFilesLoading = useLogStore(s => s.commitFilesLoading);
@@ -175,6 +187,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const addToast = useToastStore(s => s.addToast);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [smartCommitOpen, setSmartCommitOpen] = useState(false);
+  const [saveForLaterOpen, setSaveForLaterOpen] = useState(false);
   const { aiEnabled, aiApiKey } = useUIStore();
   const [collapsedUnstagedFolders, setCollapsedUnstagedFolders] = useState<Set<string>>(new Set());
   const [collapsedStagedFolders, setCollapsedStagedFolders] = useState<Set<string>>(new Set());
@@ -207,6 +220,17 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     const interval = setInterval(() => fetchStatus(repoPath), 3000);
     return () => clearInterval(interval);
   }, [repoPath, fetchStatus]);
+
+  // Prune checked files when they disappear from unstaged
+  useEffect(() => {
+    if (checkedFiles.size === 0 || !status) return;
+    const unstaged = status.files.filter((f: any) => !f.isStaged);
+    const unstagedPaths = new Set(unstaged.map((f: any) => f.path));
+    const pruned = new Set([...checkedFiles].filter(p => unstagedPaths.has(p)));
+    if (pruned.size !== checkedFiles.size) {
+      setCheckedFiles([...pruned]);
+    }
+  }, [status, checkedFiles, setCheckedFiles]);
 
   // Fetch commit files when a commit is selected
   useEffect(() => {
@@ -410,10 +434,35 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
           className="flex items-center justify-between px-3 py-1.5 bg-bg-secondary text-xs font-medium text-text-secondary flex-shrink-0"
         >
           <div className="flex items-center gap-1">
+            {unstagedFiles.length > 0 && (
+              <input
+                type="checkbox"
+                checked={unstagedFiles.length > 0 && checkedFiles.size === unstagedFiles.length}
+                ref={el => {
+                  if (el) el.indeterminate = checkedFiles.size > 0 && checkedFiles.size < unstagedFiles.length;
+                }}
+                onChange={() => {
+                  if (checkedFiles.size === unstagedFiles.length) clearChecked();
+                  else setCheckedFiles(unstagedFiles.map(f => f.path));
+                }}
+                className="w-3 h-3 rounded border-border accent-accent cursor-pointer"
+                title="Select all"
+              />
+            )}
             Unstaged ({unstagedFiles.length})
           </div>
           {unstagedFiles.length > 0 && (
             <div className="flex items-center gap-1.5">
+              {checkedFiles.size > 0 && (
+                <button
+                  onClick={() => setSaveForLaterOpen(true)}
+                  className="px-1.5 py-0.5 rounded border border-accent/40 bg-accent/15 text-accent hover:bg-accent/25 hover:border-accent/60 flex items-center gap-1 transition-colors"
+                  title={`Shelve ${checkedFiles.size} file${checkedFiles.size !== 1 ? 's' : ''}`}
+                >
+                  <Archive size={10} />
+                  <span className="text-[0.6rem] font-medium">Shelve ({checkedFiles.size})</span>
+                </button>
+              )}
               <button
                 onClick={async () => {
                   const confirmed = await confirm({
@@ -462,6 +511,8 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
                     file={f}
                     showFullPath={!groupFilesByFolder}
                     isActive={selectedFile === f.path && selectedFileSource === 'unstaged'}
+                    checked={checkedFiles.has(f.path)}
+                    onCheck={() => toggleFileCheck(f.path)}
                     onClick={() => handleSelectFile(
                       selectedFile === f.path && selectedFileSource === 'unstaged' ? null : f,
                       'unstaged'
@@ -625,6 +676,13 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
         <SmartCommitDialog
           repoPath={repoPath}
           onClose={() => setSmartCommitOpen(false)}
+        />
+      )}
+      {saveForLaterOpen && (
+        <SaveForLaterDialog
+          repoPath={repoPath}
+          files={unstagedFiles.filter(f => checkedFiles.has(f.path))}
+          onClose={() => setSaveForLaterOpen(false)}
         />
       )}
     </div>

@@ -33,6 +33,25 @@ router.post('/suggest', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: result });
 }));
 
+// Suggest branch name and message for save-for-later
+router.post('/suggest-save-for-later', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { apiKey, model, files } = req.body;
+
+  if (!apiKey) {
+    res.status(400).json({ success: false, error: 'AI API key not configured' });
+    return;
+  }
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    res.status(400).json({ success: false, error: 'No files provided' });
+    return;
+  }
+
+  const diff = await withRepoLock(repoPath, () => gitService.getDiff(repoPath));
+  const result = await aiService.suggestSaveForLater(apiKey, model || 'gemini-2.5-pro', files, diff || '');
+  res.json({ success: true, data: result });
+}));
+
 // Smart commit: analyze staged changes into groups (preview)
 router.post('/smart-commit/preview', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;

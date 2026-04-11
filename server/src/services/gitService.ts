@@ -1,6 +1,6 @@
 import simpleGit, { SimpleGit } from 'simple-git';
 import { execSync } from 'child_process';
-import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, statSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import type { GitCommit, GitBranch, GitTag, GitFileStatus, GitStatus } from '@sikagit/shared';
 import { normalizePath } from './pathService';
@@ -70,7 +70,13 @@ function readHostGitConfig(key: string): string {
 
 function getGit(repoPath: string): SimpleGit {
   const normalized = normalizePath(repoPath);
-  return simpleGit(normalized);
+  // core.quotepath=false makes git emit non-ASCII paths (Arabic, CJK, accents…)
+  // as raw UTF-8 instead of octal escapes like "\330\261\331\210...". Simple-git
+  // forwards this to every command as `-c core.quotepath=false`, so status,
+  // diff, log, etc. all return human-readable paths.
+  return simpleGit(normalized, {
+    config: ['core.quotepath=false'],
+  });
 }
 
 export async function getStatus(repoPath: string): Promise<GitStatus> {
@@ -321,6 +327,57 @@ export async function getTags(repoPath: string): Promise<GitTag[]> {
   return tags;
 }
 
+/**
+ * Maximum size of a full diff payload we're willing to return to the client.
+ * Diffs larger than this crash the browser tab when parsed/rendered (millions
+ * of DOM nodes, huge JSON payloads). Anything beyond this is replaced with
+ * a sentinel the client recognizes and renders as "diff too large".
+ */
+const MAX_DIFF_BYTES = 2 * 1024 * 1024; // 2 MB
+
+/**
+ * Maximum size of an individual untracked file we'll read into memory and
+ * convert to a synthetic diff. Beyond this we emit a "Binary files differ"
+ * stub so the UI shows a placeholder instead of loading audio/video/huge
+ * blobs into the browser.
+ */
+const MAX_UNTRACKED_DIFF_FILE_BYTES = 512 * 1024; // 512 KB
+
+/** Sentinel returned to the client when the diff would be too large to render. */
+export const DIFF_TOO_LARGE_MARKER = '__SIKAGIT_DIFF_TOO_LARGE__';
+
+/**
+ * Cheap binary detection: look for NUL bytes in the first ~8KB of the buffer.
+ * This is how git itself decides whether a file is binary.
+ */
+function isBinaryBuffer(buf: Buffer, sampleSize = 8192): boolean {
+  const n = Math.min(buf.length, sampleSize);
+  for (let i = 0; i < n; i++) {
+    if (buf[i] === 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Emit a synthetic "Binary files differ" diff stub for an untracked file.
+ * The client parser recognizes the `Binary files ... differ` line and
+ * renders a "Binary file — preview not available" placeholder.
+ */
+function syntheticBinaryUntrackedDiff(filePath: string): string {
+  return (
+    `diff --git a/${filePath} b/${filePath}\n` +
+    `new file mode 100644\n` +
+    `--- /dev/null\n` +
+    `+++ b/${filePath}\n` +
+    `Binary files /dev/null and b/${filePath} differ\n`
+  );
+}
+
+function capDiff(diff: string): string {
+  if (diff.length <= MAX_DIFF_BYTES) return diff;
+  return `${DIFF_TOO_LARGE_MARKER} ${diff.length}\n`;
+}
+
 export async function getDiff(
   repoPath: string,
   commitHash?: string,
@@ -341,17 +398,33 @@ export async function getDiff(
 
   // If no diff and we have a file path, it might be untracked — generate synthetic diff
   if (!diff && filePath && !commitHash) {
-    return generateUntrackedDiff(repoPath, filePath);
+    return capDiff(generateUntrackedDiff(repoPath, filePath));
   }
 
-  return diff;
+  return capDiff(diff);
 }
 
 function generateUntrackedDiff(repoPath: string, filePath: string): string {
   const normalized = normalizePath(repoPath);
   try {
     const fullPath = join(normalized, filePath);
-    const content = readFileSync(fullPath, 'utf-8');
+    const stat = statSync(fullPath);
+    if (!stat.isFile()) return '';
+
+    // Oversized file — never read into memory. Emit a binary-style stub so the
+    // client short-circuits rendering and shows a placeholder.
+    if (stat.size > MAX_UNTRACKED_DIFF_FILE_BYTES) {
+      return syntheticBinaryUntrackedDiff(filePath);
+    }
+
+    // Read as Buffer first so we can binary-sniff without an invalid UTF-8
+    // decode turning audio/video bytes into millions of replacement chars.
+    const buf = readFileSync(fullPath);
+    if (isBinaryBuffer(buf)) {
+      return syntheticBinaryUntrackedDiff(filePath);
+    }
+
+    const content = buf.toString('utf-8');
     const lines = content.split('\n');
     // Remove trailing empty line if file ends with newline
     if (lines.length > 0 && lines[lines.length - 1] === '') {
@@ -370,7 +443,9 @@ function generateUntrackedDiff(repoPath: string, filePath: string): string {
 
 export async function getCommitFiles(repoPath: string, commitHash: string): Promise<{ path: string; status: string }[]> {
   const normalized = normalizePath(repoPath);
-  const output = execSync(`git diff-tree --no-commit-id -r --name-status ${commitHash}`, { cwd: normalized }).toString().trim();
+  // -c core.quotepath=false keeps non-ASCII paths (Arabic, CJK…) as raw UTF-8
+  // instead of octal escapes in the --name-status output.
+  const output = execSync(`git -c core.quotepath=false diff-tree --no-commit-id -r --name-status ${commitHash}`, { cwd: normalized, encoding: 'utf-8' }).trim();
   if (!output) return [];
   return output.split('\n').map(line => {
     const [status, ...pathParts] = line.split('\t');
@@ -384,7 +459,7 @@ export async function getStagedDiff(repoPath: string, filePath?: string): Promis
   if (filePath) {
     args.push('--', filePath);
   }
-  return git.diff(args);
+  return capDiff(await git.diff(args));
 }
 
 export async function stageHunk(repoPath: string, patch: string): Promise<void> {
@@ -556,6 +631,111 @@ export async function deleteUntrackedFiles(repoPath: string, files: string[]): P
     try {
       unlinkSync(join(normalized, file));
     } catch { /* file may already be gone */ }
+  }
+}
+
+export async function saveForLater(
+  repoPath: string,
+  files: string[],
+  branchName: string,
+  message: string
+): Promise<{ branch: string; commitHash: string }> {
+  const git = getGit(repoPath);
+  const normalized = normalizePath(repoPath);
+  const status = await git.status();
+  const currentBranch = status.current;
+
+  if (!currentBranch) {
+    throw new Error('Cannot save for later in detached HEAD state');
+  }
+  if (status.conflicted.length > 0) {
+    throw new Error('Cannot save for later while there are merge conflicts');
+  }
+
+  // Validate branch name doesn't exist
+  const branches = await git.branchLocal();
+  if (branches.all.includes(branchName)) {
+    throw new Error(`Branch "${branchName}" already exists`);
+  }
+
+  // Categorize files
+  const statusMap = new Map<string, GitFileStatus>();
+  const allFiles = [...(status.files || [])];
+  for (const f of allFiles) {
+    statusMap.set(f.path, f as unknown as GitFileStatus);
+  }
+
+  // Remember currently staged files to restore after
+  const savedStaged = status.staged || [];
+
+  // Create the save branch from HEAD
+  await git.branch([branchName]);
+
+  try {
+    // Switch to save branch (carries working tree changes along)
+    await git.checkout([branchName]);
+
+    // Clear index, then stage only selected files
+    await git.reset(['HEAD']);
+    await git.add(files);
+
+    // Commit using execSync with author identity (matching existing commit() pattern)
+    const author = await getAuthorIdentity(repoPath);
+    if (!author.name || !author.email) {
+      throw new Error('Author identity not configured. Please set Author Name and Email in Repository Settings.');
+    }
+    const escapedMessage = message.replace(/'/g, "'\\''");
+    const escapedName = author.name.replace(/'/g, "'\\''");
+    const escapedEmail = author.email.replace(/'/g, "'\\''");
+    const cmd = `git -c user.name='${escapedName}' -c user.email='${escapedEmail}' commit -m '${escapedMessage}'`;
+    const result = execSync(cmd, { cwd: normalized, encoding: 'utf-8' });
+    const match = result.match(/\[[\w/.-]+\s+([a-f0-9]+)\]/);
+    const commitHash = match ? match[1] : '';
+
+    // Switch back to original branch
+    await git.checkout([currentBranch]);
+
+    // Clean up saved files from working tree
+    const trackedFiles: string[] = [];
+    const untrackedFiles: string[] = [];
+    for (const file of files) {
+      const fileStatus = statusMap.get(file);
+      if (fileStatus && (fileStatus as any).index === '?') {
+        untrackedFiles.push(file);
+      } else {
+        trackedFiles.push(file);
+      }
+    }
+
+    // Restore tracked files to HEAD version
+    if (trackedFiles.length > 0) {
+      await git.checkout(['HEAD', '--', ...trackedFiles]);
+    }
+
+    // Delete untracked files
+    for (const file of untrackedFiles) {
+      try {
+        unlinkSync(join(normalized, file));
+      } catch { /* file may already be gone */ }
+    }
+
+    // Re-stage originally staged files (minus any that were saved)
+    const savedSet = new Set(files);
+    const toRestage = savedStaged.filter((f: string) => !savedSet.has(f));
+    if (toRestage.length > 0) {
+      await git.add(toRestage);
+    }
+
+    return { branch: branchName, commitHash };
+  } catch (err) {
+    // Rollback: try to get back to original branch and delete save branch
+    try { await git.checkout([currentBranch]); } catch { /* best effort */ }
+    try { await git.branch(['-D', branchName]); } catch { /* best effort */ }
+    // Re-stage saved staged files
+    if (savedStaged.length > 0) {
+      try { await git.add(savedStaged); } catch { /* best effort */ }
+    }
+    throw err;
   }
 }
 

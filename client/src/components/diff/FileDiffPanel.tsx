@@ -102,6 +102,12 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
 
   const showHunkActions = selectedFileSource === 'unstaged';
 
+  // Server sentinel for oversized diffs (see gitService.ts DIFF_TOO_LARGE_MARKER).
+  const isOversizeDiff = diff.startsWith('__SIKAGIT_DIFF_TOO_LARGE__');
+  // Git's own marker for binary files, including the server's synthetic stub
+  // for oversized/binary untracked files.
+  const isBinaryDiff = /^(?:diff --git[^\n]*\n(?:[^\n]*\n)*?)?Binary files /m.test(diff);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-secondary flex-shrink-0">
@@ -125,9 +131,13 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
             Loading diff...
           </div>
-        ) : isBinaryFile(selectedFile) ? (
+        ) : isOversizeDiff ? (
+          <div className="flex items-center justify-center h-full px-6 text-center text-text-muted text-sm">
+            File is too large to display — preview suppressed to keep the app responsive.
+          </div>
+        ) : isBinaryFile(selectedFile) || (isBinaryDiff && !isImageFile(selectedFile)) ? (
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
-            Binary file — preview not available
+            Binary or oversized file — preview not available
           </div>
         ) : isImageFile(selectedFile) ? (
           <ImagePreview repoPath={repoPath} filePath={selectedFile} />

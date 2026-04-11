@@ -31,7 +31,22 @@ interface DiffHunk {
 interface DiffFile {
   path: string;
   hunks: DiffHunk[];
+  /** True if git reported this as a binary file, or the server replaced it with a binary stub. */
+  isBinary?: boolean;
 }
+
+/**
+ * Sentinel the server returns when a diff would be too large to render safely.
+ * Must match `DIFF_TOO_LARGE_MARKER` in the server's gitService.ts.
+ */
+const DIFF_TOO_LARGE_MARKER = '__SIKAGIT_DIFF_TOO_LARGE__';
+
+/**
+ * Hard client-side cap as a defensive backstop in case a huge diff ever
+ * reaches the client (e.g. older server, proxied response). Parsing / rendering
+ * past this size reliably crashes the browser tab.
+ */
+const MAX_CLIENT_DIFF_BYTES = 2 * 1024 * 1024; // 2 MB
 
 function parseDiffFiles(raw: string): DiffFile[] {
   const lines = raw.split('\n');
@@ -49,6 +64,21 @@ function parseDiffFiles(raw: string): DiffFile[] {
       const filePath = match ? match[2] : line;
       currentFile = { path: filePath, hunks: [] };
       files.push(currentFile);
+      currentHunk = null;
+      continue;
+    }
+
+    // Git's own binary markers — mark the file and skip rendering hunks for it.
+    // These appear as either:
+    //   "Binary files a/foo.png and b/foo.png differ"
+    //   "GIT binary patch"
+    // The server also emits a synthetic "Binary files" line for oversized or
+    // binary untracked files, which hits this same branch.
+    if (
+      currentFile &&
+      (line.startsWith('Binary files ') || line.startsWith('GIT binary patch'))
+    ) {
+      currentFile.isBinary = true;
       currentHunk = null;
       continue;
     }
@@ -271,10 +301,11 @@ function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, 
         </span>
       </div>
 
-      {/* Binary file notice */}
-      {expanded && isBinaryFile(file.path) && (
+      {/* Binary file notice — triggered by extension OR git's binary marker
+          (including server-synthesized stubs for oversized untracked files). */}
+      {expanded && (file.isBinary || isBinaryFile(file.path)) && !isImageFile(file.path) && (
         <div className="flex items-center justify-center py-6 text-text-muted text-xs">
-          Binary file — preview not available
+          Binary or oversized file — preview not available
         </div>
       )}
 
@@ -307,8 +338,9 @@ function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, 
         </div>
       )}
 
-      {/* Hunks — lazy rendered */}
-      {expanded && file.hunks.map((hunk, hi) => (
+      {/* Hunks — lazy rendered. Suppressed when the file is binary, even if
+          the diff stream somehow contained stray hunk lines. */}
+      {expanded && !file.isBinary && file.hunks.map((hunk, hi) => (
         <LazyHunk
           key={hi}
           hunk={hunk}
@@ -385,12 +417,37 @@ function LazyDiffFile({ file, hunkStartIndex, repoPath, commit, onStageHunk, onD
   );
 }
 
+/**
+ * If `diff` is oversized or the server returned the too-large sentinel,
+ * return a human-readable explanation. Returning a string (not null) means
+ * "don't parse/render — show this message instead".
+ */
+function getOversizeMessage(diff: string): string | null {
+  if (diff.startsWith(DIFF_TOO_LARGE_MARKER)) {
+    const sizeMatch = diff.match(/^__SIKAGIT_DIFF_TOO_LARGE__ (\d+)/);
+    const bytes = sizeMatch ? parseInt(sizeMatch[1], 10) : 0;
+    const mb = bytes ? (bytes / 1024 / 1024).toFixed(1) : null;
+    return mb
+      ? `Diff is too large to display (${mb} MB). Preview suppressed to keep the app responsive.`
+      : 'Diff is too large to display. Preview suppressed to keep the app responsive.';
+  }
+  if (diff.length > MAX_CLIENT_DIFF_BYTES) {
+    const mb = (diff.length / 1024 / 1024).toFixed(1);
+    return `Diff is too large to display (${mb} MB). Preview suppressed to keep the app responsive.`;
+  }
+  return null;
+}
+
 export function DiffView({ diff, repoPath, commit, onStageHunk, onDiscardHunk }: DiffViewProps) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_FILES);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const files = useMemo(() => diff ? parseDiffFiles(diff) : [], [diff]);
+  const oversizeMessage = useMemo(() => diff ? getOversizeMessage(diff) : null, [diff]);
+  const files = useMemo(
+    () => (diff && !oversizeMessage ? parseDiffFiles(diff) : []),
+    [diff, oversizeMessage]
+  );
 
   // Reset visible count and scroll position when diff changes
   useEffect(() => {
@@ -420,6 +477,14 @@ export function DiffView({ diff, repoPath, commit, onStageHunk, onDiscardHunk }:
     return (
       <div className="flex items-center justify-center h-full text-text-muted text-sm">
         No changes to display
+      </div>
+    );
+  }
+
+  if (oversizeMessage) {
+    return (
+      <div className="flex items-center justify-center h-full px-6 text-center text-text-muted text-sm">
+        {oversizeMessage}
       </div>
     );
   }

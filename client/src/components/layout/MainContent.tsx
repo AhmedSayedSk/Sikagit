@@ -483,6 +483,23 @@ export function MainContent() {
                   } catch (err: any) {
                     addToast('error', err.message);
                   }
+                } else if (action === 'unshelve') {
+                  const confirmed = await confirm({
+                    title: 'Restore Shelved Changes',
+                    message: `Merge shelved changes from "${branch}" into your current branch and delete the shelve branch?`,
+                    confirmLabel: 'Restore',
+                    variant: 'default',
+                  });
+                  if (!confirmed) return;
+                  try {
+                    await api.mergeBranch(repo.path, branch);
+                    await api.deleteBranch(repo.path, branch);
+                    addToast('success', `Restored shelved changes from ${branch}`);
+                    fetchAll(repo.path);
+                    fetchLog(repo.path);
+                  } catch (err: any) {
+                    addToast('error', err.message);
+                  }
                 } else if (action === 'delete') {
                   const confirmed = await confirm({
                     title: 'Delete Branch',
