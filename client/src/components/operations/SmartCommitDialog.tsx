@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Sparkles, Loader2, GitCommitHorizontal, ChevronDown, ChevronRight, Pencil, Check } from 'lucide-react';
+import { X, Sparkles, Loader2, GitCommitHorizontal, ChevronDown, ChevronRight, Pencil, Check, ArrowUp } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
@@ -20,12 +20,14 @@ interface CommitGroup {
 
 export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps) {
   const { aiApiKey, aiModel } = useUIStore();
+  const status = useStatusStore(s => s.status);
   const fetchStatus = useStatusStore(s => s.fetchStatus);
   const fetchLog = useLogStore(s => s.fetchLog);
   const addToast = useToastStore(s => s.addToast);
 
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
+  const [pushAfterCommit, setPushAfterCommit] = useState(false);
   const [error, setError] = useState('');
   const [groups, setGroups] = useState<CommitGroup[]>([]);
   const [expandedGroup, setExpandedGroup] = useState<number | null>(0);
@@ -55,6 +57,32 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
       setError(err.message || 'Smart commit failed');
     } finally {
       setExecuting(false);
+    }
+  };
+
+  const handleExecuteAndPush = async () => {
+    setExecuting(true);
+    setPushAfterCommit(true);
+    setError('');
+    try {
+      const result = await api.aiSmartCommitExecute(repoPath, groups);
+      const commitCount = result.commits?.length || 0;
+      try {
+        const setUpstream = !status?.tracking;
+        const pushResult = await api.gitPush(repoPath, setUpstream);
+        addToast('success', `Created ${commitCount} commit${commitCount !== 1 ? 's' : ''} and pushed`);
+        onClose();
+      } catch (pushErr: any) {
+        addToast('success', `Created ${commitCount} commit${commitCount !== 1 ? 's' : ''}`);
+        setError(pushErr.message || 'Commits created but push failed');
+      }
+      fetchStatus(repoPath);
+      fetchLog(repoPath);
+    } catch (err: any) {
+      setError(err.message || 'Smart commit failed');
+    } finally {
+      setExecuting(false);
+      setPushAfterCommit(false);
     }
   };
 
@@ -179,17 +207,32 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
             Cancel
           </button>
           {!loading && groups.length > 0 && (
-            <button
-              onClick={handleExecute}
-              disabled={executing}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium bg-accent-emphasis hover:bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {executing ? (
-                <><Loader2 size={12} className="animate-spin" /> Committing...</>
-              ) : (
-                <><Sparkles size={12} /> Execute {groups.length} Commit{groups.length !== 1 ? 's' : ''}</>
+            <>
+              <button
+                onClick={handleExecute}
+                disabled={executing}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium bg-accent-emphasis hover:bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {executing && !pushAfterCommit ? (
+                  <><Loader2 size={12} className="animate-spin" /> Committing...</>
+                ) : (
+                  <><Sparkles size={12} /> Execute {groups.length} Commit{groups.length !== 1 ? 's' : ''}</>
+                )}
+              </button>
+              {(status?.tracking || status?.remoteUrl) && (
+                <button
+                  onClick={handleExecuteAndPush}
+                  disabled={executing}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium border border-accent bg-accent/10 hover:bg-accent/20 text-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {executing && pushAfterCommit ? (
+                    <><Loader2 size={12} className="animate-spin" /> Committing & Pushing...</>
+                  ) : (
+                    <><ArrowUp size={12} /> Commit & Push</>
+                  )}
+                </button>
               )}
-            </button>
+            </>
           )}
         </div>
       </div>
