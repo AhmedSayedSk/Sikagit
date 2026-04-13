@@ -5,6 +5,7 @@ interface RepoStatusSummary {
   ahead: number;
   behind: number;
   hasChanges: boolean;
+  hasRemote: boolean;
 }
 
 interface RepoStatusState {

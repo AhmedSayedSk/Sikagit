@@ -130,13 +130,22 @@ export async function getStatusSummary(repoPath: string): Promise<{
   ahead: number;
   behind: number;
   hasChanges: boolean;
+  hasRemote: boolean;
 }> {
   const git = getGit(repoPath);
   const status = await git.status();
+  let hasRemote = false;
+  try {
+    const url = (await git.raw(['config', '--local', 'remote.origin.url'])).trim();
+    hasRemote = url.length > 0;
+  } catch {
+    // No remote.origin.url configured
+  }
   return {
     ahead: status.ahead,
     behind: status.behind,
     hasChanges: status.files.length > 0,
+    hasRemote,
   };
 }
 

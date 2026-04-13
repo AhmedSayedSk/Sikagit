@@ -19,7 +19,7 @@ router.post('/status-summary', asyncHandler(async (req: Request, res: Response) 
     res.status(400).json({ success: false, error: 'repos array required' });
     return;
   }
-  const results: Record<string, { ahead: number; behind: number; hasChanges: boolean }> = {};
+  const results: Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean }> = {};
   await Promise.all(
     repos.map(async ({ id, path: repoPath }) => {
       try {

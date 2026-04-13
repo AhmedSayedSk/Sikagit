@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, Play, GitBranch, FolderOpen, Upload, Trash2 } from 'lucide-react';
+import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, Play, GitBranch, FolderOpen, Upload, Trash2, FolderSearch } from 'lucide-react';
 import type { RepoBookmark } from '@sikagit/shared';
 import { useRepoStore } from '../../store/repoStore';
 import { useStatusStore } from '../../store/statusStore';
@@ -31,6 +31,8 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   // Repo bookmark fields
   const [name, setName] = useState(repo.name);
   const [selectedIcon, setSelectedIcon] = useState(repo.avatar || '');
+  const [repoPath, setRepoPath] = useState(repo.path);
+  const [resolvingPath, setResolvingPath] = useState(false);
 
   // Run command
   const [runCommand, setRunCommand] = useState(repo.runCommand || '');
@@ -119,13 +121,66 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
 
   const remoteUrlChanged = remoteUrl.trim() !== originalRemoteUrl;
   const remoteBlocking = remoteUrlChanged && remoteUrl.trim() !== '' && remoteStatus !== 'valid';
-  const canSave = !saving && !remoteBlocking;
+  const pathChanged = repoPath.trim() !== repo.path && repoPath.trim() !== '';
+  const canSave = !saving && !remoteBlocking && !resolvingPath;
 
+  const handleBrowseFolder = async () => {
+    if (!('showDirectoryPicker' in window)) {
+      setError('Your browser does not support the folder picker. Please type the path manually, or use Chrome/Edge.');
+      return;
+    }
+
+    try {
+      // @ts-expect-error showDirectoryPicker not yet in TS lib types
+      const dirHandle: FileSystemDirectoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+
+      const folderName = dirHandle.name;
+      const fingerprint: string[] = [];
+      try {
+        for await (const [entryName] of dirHandle.entries()) {
+          fingerprint.push(entryName);
+          if (fingerprint.length >= 8) break;
+        }
+      } catch {
+        // permission denied or empty
+      }
+
+      setResolvingPath(true);
+      setError('');
+      try {
+        const result = await api.resolveFolder(folderName, fingerprint);
+        setRepoPath(result.path);
+      } catch {
+        setRepoPath(folderName);
+        setError(`Could not auto-detect the full path for "${folderName}". Please type the full path manually.`);
+      } finally {
+        setResolvingPath(false);
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        setError(err.message);
+      }
+    }
+  };
+
+  // Git config changes need to use the OLD path, since path-change isn't committed yet
+  // and git config lives inside the folder itself (same folder, different path string).
+  // We still write git config before updating the path entry — but we write to the NEW path
+  // because if the folder moved, the old path won't resolve. Use the current repoPath input.
   const handleSave = async () => {
     setSaving(true);
     setError('');
     try {
       const parsedPort = runPort.trim() ? parseInt(runPort.trim(), 10) : null;
+
+      // If path changed, update that first so the backend validates the new folder is a git repo.
+      // The updated repo object returned will have the new path which we use for subsequent calls.
+      let effectivePath = repo.path;
+      if (pathChanged) {
+        await updateRepo(repo.id, { path: repoPath.trim() });
+        effectivePath = repoPath.trim();
+      }
+
       await updateRepo(repo.id, {
         name: name.trim() || repo.name,
         avatar: selectedIcon || undefined,
@@ -140,14 +195,14 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
         ['user.email', userEmail.trim()],
       ];
       for (const [key, value] of configs) {
-        await api.setGitConfig(repo.path, key, value);
+        await api.setGitConfig(effectivePath, key, value);
       }
 
       if (remoteUrlChanged) {
-        await api.setRemoteUrl(repo.path, remoteUrl.trim());
+        await api.setRemoteUrl(effectivePath, remoteUrl.trim());
       }
 
-      fetchAll(repo.path);
+      fetchAll(effectivePath);
       onClose();
     } catch (err: any) {
       setError(err.message);
@@ -294,19 +349,39 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
                   </div>
                 </div>
 
-                {/* Path (read-only info) */}
+                {/* Path (editable — change if the folder was moved or renamed) */}
                 <div>
                   <label className="block text-xs text-text-secondary mb-1.5 font-medium">Local Path</label>
-                  <div className="flex items-center gap-2">
-                    <FolderOpen size={14} className="text-text-muted flex-shrink-0" />
-                    <input
-                      type="text"
-                      value={repo.displayPath}
-                      readOnly
-                      className="w-full bg-bg-tertiary/50 border border-border rounded px-3 py-2 text-sm text-text-muted cursor-default font-mono text-xs"
-                    />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <FolderOpen size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                      <input
+                        type="text"
+                        value={repoPath}
+                        onChange={e => setRepoPath(e.target.value)}
+                        placeholder="D:\projects\my-repo or /home/user/my-repo"
+                        className={cn(
+                          'w-full bg-bg-primary border rounded pl-8 pr-3 py-2 text-text-primary font-mono text-xs focus:outline-none transition-colors',
+                          pathChanged ? 'border-accent/60 focus:border-accent' : 'border-border focus:border-accent'
+                        )}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleBrowseFolder}
+                      disabled={resolvingPath}
+                      className="px-3 py-2 rounded border bg-bg-primary border-border text-text-secondary hover:text-text-primary hover:border-accent/40 transition-colors disabled:opacity-50"
+                      title="Browse folders"
+                    >
+                      {resolvingPath ? <Loader2 size={14} className="animate-spin" /> : <FolderSearch size={14} />}
+                    </button>
                   </div>
-                  {repo.isWSL && (
+                  <p className="text-[0.6rem] text-text-muted mt-1">
+                    {pathChanged
+                      ? 'New path will be validated as a git repo on save'
+                      : 'Change this if you renamed or moved the folder on disk'}
+                  </p>
+                  {repo.isWSL && !pathChanged && (
                     <p className="text-[0.55rem] text-accent/70 mt-1 flex items-center gap-1">
                       WSL filesystem
                     </p>
