@@ -25,7 +25,7 @@ export const api = {
     body: JSON.stringify({ path }),
   }),
   deleteRepo: (id: string) => request<void>(`/repos/${id}`, { method: 'DELETE' }),
-  updateRepo: (id: string, data: { name?: string; group?: string; avatar?: string; runCommand?: string; runPort?: number | null; buildCommand?: string; autoBuildOnCheckout?: boolean }) =>
+  updateRepo: (id: string, data: { name?: string; group?: string; avatar?: string; runCommand?: string; runPort?: number | null; buildCommand?: string; autoBuildOnCheckout?: boolean; path?: string }) =>
     request<import('@sikagit/shared').RepoBookmark>(`/repos/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -49,7 +49,7 @@ export const api = {
   // Git
   getStatus: (repo: string) => request<import('@sikagit/shared').GitStatus>(`/git/status?repo=${encodeURIComponent(repo)}`),
   getStatusSummary: (repos: { id: string; path: string }[]) =>
-    request<Record<string, { ahead: number; behind: number; hasChanges: boolean }>>('/git/status-summary', {
+    request<Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean }>>('/git/status-summary', {
       method: 'POST',
       body: JSON.stringify({ repos }),
     }),

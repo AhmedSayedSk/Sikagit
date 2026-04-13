@@ -58,9 +58,45 @@ router.delete('/:id', (req: Request, res: Response) => {
 
 router.patch('/:id', (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { name, group, avatar, runCommand, runPort, buildCommand, autoBuildOnCheckout } = req.body;
+  const { name, group, avatar, runCommand, runPort, buildCommand, autoBuildOnCheckout, path: inputPath } = req.body;
 
-  const updated = db.updateRepo(id, { name, group, avatar, runCommand, runPort, buildCommand, autoBuildOnCheckout });
+  const patch: Partial<RepoBookmark> = { name, group, avatar, runCommand, runPort, buildCommand, autoBuildOnCheckout };
+
+  // If a new path is provided, validate it, check for conflicts, and derive related fields
+  if (inputPath !== undefined) {
+    const existing = db.getRepoById(id);
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Repository not found' });
+      return;
+    }
+
+    const normalized = normalizePath(inputPath);
+
+    if (normalized !== existing.path) {
+      const validation = validateGitRepo(normalized);
+      if (!validation.valid) {
+        res.status(400).json({ success: false, error: validation.error });
+        return;
+      }
+
+      if (db.repoExistsByPath(normalized)) {
+        res.status(409).json({ success: false, error: 'Another repository is already registered at this path' });
+        return;
+      }
+
+      patch.path = normalized;
+      patch.displayPath = getDisplayPath(normalized);
+      patch.isWSL = isWSLPath(normalized);
+
+      // Only auto-rename the display name if the user never customized it (i.e. it still matches the old folder name)
+      const oldFolderName = getRepoName(existing.path);
+      if (existing.name === oldFolderName && name === undefined) {
+        patch.name = getRepoName(normalized);
+      }
+    }
+  }
+
+  const updated = db.updateRepo(id, patch);
   if (!updated) {
     res.status(404).json({ success: false, error: 'Repository not found' });
     return;

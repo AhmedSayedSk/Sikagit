@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot, Play } from 'lucide-react';
+import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot, Play, CloudOff } from 'lucide-react';
 import { getRepoIcon, isCustomImage } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -17,11 +17,17 @@ function RepoStatusDot({ repoId }: { repoId: string }) {
   const summary = useRepoStatusStore(s => s.summaries[repoId]);
   const isRunning = useRunStore(s => s.running[repoId]);
 
-  const { ahead = 0, behind = 0, hasChanges = false } = summary ?? {};
-  if (ahead === 0 && behind === 0 && !hasChanges && !isRunning) return null;
+  const { ahead = 0, behind = 0, hasChanges = false, hasRemote = true } = summary ?? {};
+  const noRemote = summary !== undefined && !hasRemote;
+  if (ahead === 0 && behind === 0 && !hasChanges && !isRunning && !noRemote) return null;
 
   return (
     <span className="flex items-center justify-end gap-1.5 flex-shrink-0">
+      {noRemote && (
+        <span title="No remote origin configured" className="text-text-muted">
+          <CloudOff size={11} strokeWidth={2.5} />
+        </span>
+      )}
       {isRunning && (
         <span title="Command running" className="text-accent">
           <Play size={9} strokeWidth={2.5} fill="currentColor" />
@@ -55,6 +61,7 @@ function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos:
   let totalBehind = 0;
   let anyChanges = false;
   let anyRunning = false;
+  let anyNoRemote = false;
 
   for (const id of projectRepoIds) {
     const s = summaries[id];
@@ -62,14 +69,20 @@ function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos:
       totalAhead += s.ahead;
       totalBehind += s.behind;
       if (s.hasChanges) anyChanges = true;
+      if (!s.hasRemote) anyNoRemote = true;
     }
     if (running[id]) anyRunning = true;
   }
 
-  if (hidden || (totalAhead === 0 && totalBehind === 0 && !anyChanges && !anyRunning)) return null;
+  if (hidden || (totalAhead === 0 && totalBehind === 0 && !anyChanges && !anyRunning && !anyNoRemote)) return null;
 
   return (
     <span className="flex items-center justify-end gap-1.5 flex-shrink-0">
+      {anyNoRemote && (
+        <span title="One or more repos have no remote origin configured" className="text-text-muted">
+          <CloudOff size={11} strokeWidth={2.5} />
+        </span>
+      )}
       {anyRunning && (
         <span title="Command running" className="text-accent">
           <Play size={9} strokeWidth={2.5} fill="currentColor" />

@@ -193,6 +193,9 @@ export function updateRepo(id: string, data: Partial<RepoBookmark>): RepoBookmar
   const sets: string[] = [];
   const params: any = { id };
 
+  if (data.path !== undefined) { sets.push('path = @path'); params.path = data.path; }
+  if (data.displayPath !== undefined) { sets.push('display_path = @displayPath'); params.displayPath = data.displayPath; }
+  if (data.isWSL !== undefined) { sets.push('is_wsl = @isWSL'); params.isWSL = data.isWSL ? 1 : 0; }
   if (data.name !== undefined) { sets.push('name = @name'); params.name = data.name; }
   if (data.group !== undefined) { sets.push('"group" = @group'); params.group = data.group; }
   if (data.avatar !== undefined) { sets.push('avatar = @avatar'); params.avatar = data.avatar; }
