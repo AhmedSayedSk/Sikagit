@@ -14,8 +14,9 @@ services:
       - "5000-5001:5000-5001"
       # 8000 reserved for FTW Expo
       # - "8000:8000"
-      - "8080-8083:8080-8083"
-      - "8085-8090:8085-8090"
+      # Host ports remapped out of 8000-8999 range (control panel uses 8080)
+      - "9100-9103:8080-8083"
+      - "9105-9110:8085-8090"
       - "9000:9000"
     volumes:
       - ./server/src:/app/server/src
