@@ -836,7 +836,11 @@ async function getAuthorIdentity(repoPath: string): Promise<{ name: string; emai
   return { name: await getVal('user.name'), email: await getVal('user.email') };
 }
 
-export async function gitPull(repoPath: string, strategy?: 'merge' | 'rebase'): Promise<string> {
+export async function gitPull(
+  repoPath: string,
+  strategy?: 'merge' | 'rebase',
+  allowUnrelatedHistories?: boolean,
+): Promise<string> {
   const git = getGit(repoPath);
   const normalized = normalizePath(repoPath);
   const status = await git.status();
@@ -849,6 +853,7 @@ export async function gitPull(repoPath: string, strategy?: 'merge' | 'rebase'): 
 
       if (strategy === 'rebase') pullArgs.push('--rebase');
       else if (strategy === 'merge') pullArgs.push('--no-rebase');
+      if (allowUnrelatedHistories) pullArgs.push('--allow-unrelated-histories');
 
       if (remote) pullArgs.push(remote);
       if (branch) pullArgs.push(branch);
@@ -871,9 +876,14 @@ export async function gitPull(repoPath: string, strategy?: 'merge' | 'rebase'): 
       const changesMatch = output.match(/(\d+) files? changed/);
       return changesMatch ? `${changesMatch[1]} file(s) changed` : 'Pulled successfully';
     } catch (err: any) {
-      if (err.message?.includes('Need to specify how to reconcile divergent branches') ||
-          err.message?.includes('need to specify how to reconcile divergent branches')) {
+      const msg = err.message || '';
+      if (msg.includes('Need to specify how to reconcile divergent branches') ||
+          msg.includes('need to specify how to reconcile divergent branches')) {
         throw new Error('DIVERGED');
+      }
+      if (msg.includes('refusing to merge unrelated histories') ||
+          msg.includes('fatal: no common commits')) {
+        throw new Error('UNRELATED_HISTORIES');
       }
       throw err;
     }
@@ -913,30 +923,48 @@ export async function gitPull(repoPath: string, strategy?: 'merge' | 'rebase'): 
   }
 }
 
+function isNonFastForwardError(msg: string): boolean {
+  if (!msg) return false;
+  return (
+    msg.includes('! [rejected]') ||
+    msg.includes('(fetch first)') ||
+    msg.includes('(non-fast-forward)') ||
+    msg.includes('Updates were rejected because the remote contains work') ||
+    msg.includes('Updates were rejected because the tip of your current branch is behind')
+  );
+}
+
 export async function gitPush(repoPath: string, setUpstream?: boolean, upToCommit?: string, force?: boolean): Promise<string> {
   const git = getGit(repoPath);
   const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
 
-  if (upToCommit) {
-    // Push only up to a specific commit: git push origin <hash>:refs/heads/<branch>
-    const args = ['origin', `${upToCommit}:refs/heads/${branch}`];
-    if (force) args.unshift('--force-with-lease');
-    await git.push(args);
-    return `Pushed up to ${upToCommit.slice(0, 7)}`;
-  }
+  try {
+    if (upToCommit) {
+      // Push only up to a specific commit: git push origin <hash>:refs/heads/<branch>
+      const args = ['origin', `${upToCommit}:refs/heads/${branch}`];
+      if (force) args.unshift('--force-with-lease');
+      await git.push(args);
+      return `Pushed up to ${upToCommit.slice(0, 7)}`;
+    }
 
-  if (setUpstream) {
-    const args = ['--set-upstream', 'origin', branch];
-    if (force) args.unshift('--force-with-lease');
-    await git.push(args);
-    return `Pushed and set upstream for ${branch}`;
+    if (setUpstream) {
+      const args = ['--set-upstream', 'origin', branch];
+      if (force) args.unshift('--force-with-lease');
+      await git.push(args);
+      return `Pushed and set upstream for ${branch}`;
+    }
+    if (force) {
+      await git.push(['--force-with-lease', 'origin', branch]);
+    } else {
+      await git.push('origin');
+    }
+    return force ? `Force pushed ${branch} successfully` : 'Pushed successfully';
+  } catch (err: any) {
+    if (!force && isNonFastForwardError(err?.message || '')) {
+      throw new Error('REJECTED_NON_FAST_FORWARD');
+    }
+    throw err;
   }
-  if (force) {
-    await git.push(['--force-with-lease', 'origin', branch]);
-  } else {
-    await git.push('origin');
-  }
-  return force ? `Force pushed ${branch} successfully` : 'Pushed successfully';
 }
 
 export async function getFileContent(repoPath: string, filePath: string, commitHash?: string): Promise<Buffer> {

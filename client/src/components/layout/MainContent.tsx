@@ -125,12 +125,18 @@ export function MainContent() {
     setRemoteAction(null);
   }, [repo, remoteAction, refreshAfterRemote, addToast]);
 
-  const doPull = useCallback(async (repoPath: string, strategy?: 'merge' | 'rebase') => {
+  const doPull = useCallback(async (
+    repoPath: string,
+    strategy?: 'merge' | 'rebase',
+    allowUnrelatedHistories?: boolean,
+  ): Promise<boolean> => {
     setRemoteAction('pull');
     try {
-      const result = await api.gitPull(repoPath, strategy);
+      const result = await api.gitPull(repoPath, strategy, allowUnrelatedHistories);
       refreshAfterRemote();
       addToast('success', result.message || 'Pulled from remote');
+      setRemoteAction(null);
+      return true;
     } catch (err: any) {
       if (err.message === 'DIVERGED') {
         setRemoteAction(null);
@@ -154,17 +160,74 @@ export function MainContent() {
         if (wantsRebase) {
           return doPull(repoPath, 'rebase');
         }
-        return;
+        return false;
+      }
+      if (err.message === 'UNRELATED_HISTORIES') {
+        setRemoteAction(null);
+        const wantsAllow = await confirm({
+          title: 'Unrelated Histories',
+          message: 'Local and remote have no commits in common. Git will refuse to combine them without explicit permission.\n\nMerge unrelated histories? This keeps every commit from both sides but produces a duplicated-looking log.',
+          confirmLabel: 'Merge anyway',
+          cancelLabel: 'Cancel',
+          variant: 'warning',
+        });
+        if (wantsAllow) {
+          return doPull(repoPath, strategy ?? 'merge', true);
+        }
+        return false;
       }
       addToast('error', err.message || 'Pull failed');
+      setRemoteAction(null);
+      return false;
     }
-    setRemoteAction(null);
   }, [refreshAfterRemote, addToast, confirm]);
 
   const handlePull = useCallback(() => {
     if (!repo || remoteAction) return;
     doPull(repo.path);
   }, [repo, remoteAction, doPull]);
+
+  const doPush = useCallback(async (repoPath: string, force: boolean): Promise<boolean> => {
+    setRemoteAction('push');
+    try {
+      const setUpstream = !status?.tracking;
+      const result = await api.gitPush(repoPath, setUpstream, undefined, force);
+      refreshAfterRemote();
+      addToast('success', result.message || (force ? 'Force pushed to remote' : 'Pushed to remote'));
+      setRemoteAction(null);
+      return true;
+    } catch (err: any) {
+      if (err.message === 'REJECTED_NON_FAST_FORWARD') {
+        setRemoteAction(null);
+        const wantsPullRebase = await confirm({
+          title: 'Push Rejected',
+          message: 'The remote has commits you don\'t have locally. Pull with rebase and try again?\n\nThis replays your commits on top of the remote changes, then pushes.',
+          confirmLabel: 'Pull (rebase) & Push',
+          cancelLabel: 'Other options...',
+          variant: 'warning',
+        });
+        if (wantsPullRebase) {
+          const pulled = await doPull(repoPath, 'rebase');
+          if (!pulled) return false;
+          return doPush(repoPath, false);
+        }
+        const wantsForce = await confirm({
+          title: 'Force Push with Lease?',
+          message: 'Overwrite the remote branch with your local history? Any remote-only commits will be lost.\n\n--force-with-lease refuses if someone else pushed in the meantime.',
+          confirmLabel: 'Force Push',
+          cancelLabel: 'Cancel',
+          variant: 'danger',
+        });
+        if (wantsForce) {
+          return doPush(repoPath, true);
+        }
+        return false;
+      }
+      addToast('error', err.message || 'Push failed');
+      setRemoteAction(null);
+      return false;
+    }
+  }, [status?.tracking, refreshAfterRemote, addToast, confirm, doPull]);
 
   const handlePush = useCallback(async (force = false) => {
     if (!repo || remoteAction) return;
@@ -181,17 +244,8 @@ export function MainContent() {
       variant: force ? 'danger' : 'info',
     });
     if (!confirmed) return;
-    setRemoteAction('push');
-    try {
-      const setUpstream = !status?.tracking;
-      const result = await api.gitPush(repo.path, setUpstream, undefined, force);
-      refreshAfterRemote();
-      addToast('success', result.message || (force ? 'Force pushed to remote' : 'Pushed to remote'));
-    } catch (err: any) {
-      addToast('error', err.message || 'Push failed');
-    }
-    setRemoteAction(null);
-  }, [repo, remoteAction, status?.tracking, status?.ahead, status?.behind, refreshAfterRemote, addToast, confirm]);
+    await doPush(repo.path, force);
+  }, [repo, remoteAction, status?.ahead, status?.behind, confirm, doPush]);
 
   if (!repo) {
     return (

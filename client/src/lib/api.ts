@@ -156,9 +156,9 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo }),
   }),
-  gitPull: (repo: string, strategy?: 'merge' | 'rebase') => request<{ message: string }>('/git/pull', {
+  gitPull: (repo: string, strategy?: 'merge' | 'rebase', allowUnrelatedHistories?: boolean) => request<{ message: string }>('/git/pull', {
     method: 'POST',
-    body: JSON.stringify({ repo, strategy }),
+    body: JSON.stringify({ repo, strategy, allowUnrelatedHistories }),
   }),
   gitPush: (repo: string, setUpstream?: boolean, upToCommit?: string, force?: boolean) => request<{ message: string }>('/git/push', {
     method: 'POST',
