@@ -79,6 +79,23 @@ function getGit(repoPath: string): SimpleGit {
   });
 }
 
+/**
+ * Returns true if HEAD points to an existing commit. A freshly-initialized repo
+ * with zero commits has an "unborn" HEAD, and any git command that references
+ * HEAD (rev-parse, log, reset, checkout, diff) fails with
+ * `fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree`.
+ * Guard callers with this helper and branch to an empty-repo path instead.
+ */
+async function hasCommits(repoPath: string): Promise<boolean> {
+  const git = getGit(repoPath);
+  try {
+    await git.revparse(['HEAD']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function getStatus(repoPath: string): Promise<GitStatus> {
   const git = getGit(repoPath);
   const status = await git.status();
@@ -155,6 +172,8 @@ export async function getLog(
   skip = 0
 ): Promise<GitCommit[]> {
   const git = getGit(repoPath);
+
+  if (!(await hasCommits(repoPath))) return [];
 
   const log = await git.log({
     maxCount: limit,
@@ -496,11 +515,28 @@ export async function stageFiles(repoPath: string, files: string[]): Promise<voi
 
 export async function unstageFiles(repoPath: string, files: string[]): Promise<void> {
   const git = getGit(repoPath);
+  if (!(await hasCommits(repoPath))) {
+    // No HEAD to reset to. Remove the entries from the index directly; --cached
+    // leaves the working-tree copy on disk. -f bypasses the safety check that
+    // fires when the working-tree copy differs from the index entry — since we
+    // are only unstaging (not deleting), that divergence is exactly the state
+    // we intend to preserve.
+    await git.raw(['rm', '--cached', '-f', '--', ...files]);
+    return;
+  }
   await git.reset(['HEAD', '--', ...files]);
 }
 
 export async function unstageAll(repoPath: string): Promise<void> {
   const git = getGit(repoPath);
+  if (!(await hasCommits(repoPath))) {
+    const status = await git.status();
+    const staged = Array.from(new Set([...status.staged, ...status.created]));
+    if (staged.length > 0) {
+      await git.raw(['rm', '--cached', '-f', '--', ...staged]);
+    }
+    return;
+  }
   await git.reset(['HEAD']);
 }
 
@@ -936,6 +972,9 @@ function isNonFastForwardError(msg: string): boolean {
 
 export async function gitPush(repoPath: string, setUpstream?: boolean, upToCommit?: string, force?: boolean): Promise<string> {
   const git = getGit(repoPath);
+  if (!(await hasCommits(repoPath))) {
+    throw new Error('Nothing to push — repository has no commits yet. Make your first commit before pushing.');
+  }
   const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
 
   try {
