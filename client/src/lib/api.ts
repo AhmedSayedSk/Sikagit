@@ -45,6 +45,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
   deleteProject: (id: string) => request<void>(`/projects/${id}`, { method: 'DELETE' }),
+  reorderProjects: (ids: string[]) =>
+    request<import('@sikagit/shared').Project[]>('/projects/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
 
   // Git
   getStatus: (repo: string) => request<import('@sikagit/shared').GitStatus>(`/git/status?repo=${encodeURIComponent(repo)}`),

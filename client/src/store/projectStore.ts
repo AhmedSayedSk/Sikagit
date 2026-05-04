@@ -8,6 +8,7 @@ interface ProjectState {
   createProject: (name: string, repoIds?: string[], avatar?: string) => Promise<void>;
   updateProject: (id: string, data: { name?: string; avatar?: string; repoIds?: string[] }) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
+  reorderProjects: (ids: string[]) => Promise<void>;
   addRepoToProject: (projectId: string, repoId: string) => Promise<void>;
   removeRepoFromProject: (projectId: string, repoId: string) => Promise<void>;
 }
@@ -33,6 +34,22 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   deleteProject: async (id) => {
     await api.deleteProject(id);
     set(state => ({ projects: state.projects.filter(p => p.id !== id) }));
+  },
+
+  reorderProjects: async (ids) => {
+    // Optimistic: reorder locally first, then sync with server
+    const current = get().projects;
+    const reordered = ids
+      .map(id => current.find(p => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => !!p);
+    set({ projects: reordered });
+    try {
+      const projects = await api.reorderProjects(ids);
+      set({ projects });
+    } catch (err) {
+      set({ projects: current });
+      throw err;
+    }
   },
 
   addRepoToProject: async (projectId, repoId) => {

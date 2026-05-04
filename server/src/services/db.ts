@@ -69,6 +69,13 @@ if (colNames.includes('color')) {
 if (colNames.includes('icon')) {
   db.exec(`ALTER TABLE projects DROP COLUMN icon`);
 }
+// Migrate: add position column to projects, back-fill from rowid
+if (!colNames.includes('position')) {
+  db.exec(`ALTER TABLE projects ADD COLUMN position INTEGER NOT NULL DEFAULT 0`);
+  const projRows = db.prepare('SELECT rowid, id FROM projects ORDER BY rowid').all() as any[];
+  const updateProjPos = db.prepare('UPDATE projects SET position = ? WHERE id = ?');
+  projRows.forEach((row, idx) => updateProjPos.run(idx, row.id));
+}
 
 // Migrate: add run_command column to repos if missing
 const repoCols = db.prepare("PRAGMA table_info(repos)").all() as { name: string }[];
@@ -221,10 +228,12 @@ export function repoExistsByPath(repoPath: string): boolean {
 
 // --- Project CRUD ---
 
-const stmtAllProjects = db.prepare('SELECT * FROM projects');
+const stmtAllProjects = db.prepare('SELECT * FROM projects ORDER BY position, rowid');
+const stmtMaxProjectPosition = db.prepare('SELECT COALESCE(MAX(position), -1) AS maxPos FROM projects');
+const stmtUpdateProjectPosition = db.prepare('UPDATE projects SET position = ? WHERE id = ?');
 const stmtProjectById = db.prepare('SELECT * FROM projects WHERE id = ?');
 const stmtInsertProject = db.prepare(
-  `INSERT INTO projects (id, name, avatar, created_at) VALUES (@id, @name, @avatar, @createdAt)`
+  `INSERT INTO projects (id, name, avatar, created_at, position) VALUES (@id, @name, @avatar, @createdAt, @position)`
 );
 const stmtDeleteProject = db.prepare('DELETE FROM projects WHERE id = ?');
 const stmtProjectRepos = db.prepare('SELECT repo_id FROM project_repos WHERE project_id = ? ORDER BY position');
@@ -261,17 +270,27 @@ export function getProjectById(id: string): Project | undefined {
 
 export function insertProject(project: Project): void {
   const insert = db.transaction(() => {
+    const { maxPos } = stmtMaxProjectPosition.get() as { maxPos: number };
     stmtInsertProject.run({
       id: project.id,
       name: project.name,
       avatar: project.avatar ?? null,
       createdAt: project.createdAt,
+      position: maxPos + 1,
     });
     project.repoIds.forEach((repoId, position) => {
       stmtInsertProjectRepo.run({ projectId: project.id, repoId, position });
     });
   });
   insert();
+}
+
+export function reorderProjects(ids: string[]): Project[] {
+  const reorder = db.transaction(() => {
+    ids.forEach((id, idx) => stmtUpdateProjectPosition.run(idx, id));
+  });
+  reorder();
+  return getAllProjects();
 }
 
 export function updateProject(
