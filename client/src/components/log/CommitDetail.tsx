@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import { X, Copy, Check, GitCommitHorizontal, GitMerge, User, Calendar, GitFork, Undo2, Loader2, Upload, RotateCcw } from 'lucide-react';
 import { MergeDialog } from '../operations/MergeDialog';
 import { useLogStore } from '../../store/logStore';
@@ -35,9 +35,9 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const status = useStatusStore(s => s.status);
   const [scrollY, setScrollY] = useState(0);
-  const collapseRef = useRef<HTMLDivElement>(null);
-  const [collapseHeight, setCollapseHeight] = useState<number | null>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
   const diffWrapRef = useRef<HTMLDivElement>(null);
+  const [collapseHeight, setCollapseHeight] = useState<number | null>(null);
 
   // Fetch diff for uncommitted changes (staged + unstaged combined)
   useEffect(() => {
@@ -54,64 +54,39 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
     if (commit) {
       api.getDiff(repoPath, commit.hash, selectedCommitFile || undefined).then(setDiff).catch(() => setDiff(''));
       setScrollY(0);
-      setCollapseHeight(null);
     }
   }, [isUncommitted, commit?.hash, repoPath, selectedCommitFile]);
 
-  // Measure the collapsible section height — temporarily remove constraints to get true height
-  useEffect(() => {
-    const el = collapseRef.current;
+  // Measure natural height of description+metadata via inner wrapper.
+  // Stays at auto height regardless of outer's controlled height.
+  useLayoutEffect(() => {
+    const el = measureRef.current;
     if (!el) return;
-    // Remove inline height/overflow so scrollHeight reflects full content
-    const prevHeight = el.style.height;
-    const prevOverflow = el.style.overflow;
-    el.style.height = 'auto';
-    el.style.overflow = 'visible';
-    requestAnimationFrame(() => {
-      if (collapseRef.current) {
-        setCollapseHeight(collapseRef.current.scrollHeight);
-      }
-      // Restore (the render will re-apply the correct values)
-      el.style.height = prevHeight;
-      el.style.overflow = prevOverflow;
-    });
-  }, [commit?.hash, commit?.body, commit?.branches?.length]);
+    const measure = () => {
+      if (measureRef.current) setCollapseHeight(measureRef.current.offsetHeight);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [commit?.hash]);
 
-  // Listen to scroll on the first scrollable child inside the diff wrapper
+  // Track diff scroll to drive the collapse
   useEffect(() => {
     const wrapper = diffWrapRef.current;
     if (!wrapper) return;
-
-    const findScrollable = (): HTMLElement | null => {
-      // DiffView renders an overflow-auto div
-      const el = wrapper.querySelector('[class*="overflow-auto"]') as HTMLElement;
-      return el || wrapper;
-    };
-
     let scrollEl: HTMLElement | null = null;
-
-    const onScroll = () => {
-      if (scrollEl) setScrollY(scrollEl.scrollTop);
-    };
-
-    // Use MutationObserver to wait for DiffView to render
+    const onScroll = () => { if (scrollEl) setScrollY(scrollEl.scrollTop); };
     const attach = () => {
-      scrollEl = findScrollable();
-      if (scrollEl) {
-        scrollEl.addEventListener('scroll', onScroll, { passive: true });
-      }
+      scrollEl = wrapper.querySelector('[class*="overflow-auto"]') as HTMLElement | null;
+      if (scrollEl) scrollEl.addEventListener('scroll', onScroll, { passive: true });
     };
-
-    // Try immediately
     attach();
-
-    // Also observe for children being added
     const observer = new MutationObserver(() => {
       if (scrollEl) scrollEl.removeEventListener('scroll', onScroll);
       attach();
     });
     observer.observe(wrapper, { childList: true, subtree: true });
-
     return () => {
       if (scrollEl) scrollEl.removeEventListener('scroll', onScroll);
       observer.disconnect();
@@ -143,7 +118,7 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
             </button>
           </div>
         </div>
-        <div ref={diffWrapRef} className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden">
           {diff ? (
             <DiffView diff={diff} repoPath={repoPath} />
           ) : (
@@ -245,10 +220,12 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
 
   const hasBody = commit.body && commit.body.trim();
 
-  // Collapse progress: 0 = fully expanded, 1 = fully collapsed
-  const maxCollapse = collapseHeight || 60;
-  const collapseProgress = Math.min(1, scrollY / maxCollapse);
-  const visibleHeight = maxCollapse * (1 - collapseProgress);
+  // Cap natural height at 40vh so very long descriptions don't dominate the panel.
+  // Once measured, drive a smooth shrink based on diff scroll position.
+  const naturalHeight = collapseHeight ?? 0;
+  const maxHeight = Math.min(naturalHeight, Math.round(window.innerHeight * 0.4));
+  const collapseProgress = maxHeight > 0 ? Math.min(1, scrollY / maxHeight) : 0;
+  const visibleHeight = maxHeight * (1 - collapseProgress);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -260,12 +237,6 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
             <GitCommitHorizontal size={13} className="text-accent flex-shrink-0" />
             <p className="text-xs font-semibold text-text-primary leading-snug truncate">{commit.message}</p>
           </div>
-          {/* Show collapsed metadata inline when collapsed */}
-          {collapseProgress > 0.8 && (
-            <span className="text-[0.6rem] text-text-muted flex-shrink-0" style={{ opacity: Math.min(1, (collapseProgress - 0.8) / 0.2) }}>
-              {truncateHash(commit.hash)} · {commit.authorName}
-            </span>
-          )}
           <button
             onClick={() => selectCommit(null)}
             className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary flex-shrink-0"
@@ -274,15 +245,15 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
           </button>
         </div>
 
-        {/* Collapsible: description + metadata */}
+        {/* Outer = controlled height + clip. Inner measureRef = natural height for measurement. */}
         <div
-          ref={collapseRef}
           style={{
-            height: visibleHeight,
+            height: collapseHeight === null ? undefined : visibleHeight,
             opacity: 1 - collapseProgress * 0.6,
             overflow: 'hidden',
           }}
         >
+        <div ref={measureRef}>
           {/* Description */}
           {hasBody && (
             <div className="px-3.5 pb-1.5">
@@ -364,6 +335,7 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
               );
             })()}
           </div>
+        </div>
         </div>
       </div>
 
