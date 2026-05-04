@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot, Play, CloudOff } from 'lucide-react';
+import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot, Play, CloudOff, MoreVertical, ListOrdered } from 'lucide-react';
 import { getRepoIcon, isCustomImage } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -7,6 +7,7 @@ import { useUIStore } from '../../store/uiStore';
 import { AddRepoDialog } from '../operations/AddRepoDialog';
 import { AppSettingsDialog } from '../operations/AppSettingsDialog';
 import { ProjectDialog } from '../operations/ProjectDialog';
+import { ProjectsReorderDialog } from '../operations/ProjectsReorderDialog';
 import { useConfirmStore } from '../../store/confirmStore';
 import { useRepoStatusStore } from '../../store/repoStatusStore';
 import { useRunStore } from '../../store/runStore';
@@ -447,7 +448,25 @@ export function Sidebar() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project }>({ open: false });
+  const [showReorderProjects, setShowReorderProjects] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const confirm = useConfirmStore(s => s.confirm);
+
+  // Close header menu on outside click / Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   // Poll repo status summaries every 30 seconds
   useEffect(() => {
@@ -485,21 +504,45 @@ export function Sidebar() {
           <FolderGit2 size={16} className="text-accent" />
           <span className="font-semibold">Repositories</span>
         </div>
-        <div className="flex gap-1">
+        <div ref={menuRef} className="relative">
           <button
-            onClick={() => setProjectDialog({ open: true })}
-            className="p-1 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
-            title="New project"
+            onClick={() => setMenuOpen(o => !o)}
+            className={cn(
+              'p-1 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors',
+              menuOpen && 'bg-bg-tertiary text-text-primary'
+            )}
+            title="More actions"
           >
-            <FolderKanban size={14} />
+            <MoreVertical size={14} />
           </button>
-          <button
-            onClick={() => setShowAddDialog(true)}
-            className="p-1 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
-            title="Add repository"
-          >
-            <Plus size={14} />
-          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 z-30 min-w-[180px] bg-bg-primary border border-border rounded-md shadow-lg py-1">
+              <button
+                onClick={() => { setMenuOpen(false); setShowAddDialog(true); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+              >
+                <Plus size={13} className="text-text-muted" />
+                Add Repository
+              </button>
+              <button
+                onClick={() => { setMenuOpen(false); setProjectDialog({ open: true }); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+              >
+                <FolderKanban size={13} className="text-text-muted" />
+                New Project
+              </button>
+              <div className="my-1 border-t border-border/60" />
+              <button
+                onClick={() => { setMenuOpen(false); setShowReorderProjects(true); }}
+                disabled={projects.length < 2}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                title={projects.length < 2 ? 'Need at least 2 projects to reorder' : undefined}
+              >
+                <ListOrdered size={13} className="text-text-muted" />
+                Reorder Projects
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -578,6 +621,9 @@ export function Sidebar() {
           project={projectDialog.project}
           onClose={() => setProjectDialog({ open: false })}
         />
+      )}
+      {showReorderProjects && (
+        <ProjectsReorderDialog onClose={() => setShowReorderProjects(false)} />
       )}
     </aside>
   );

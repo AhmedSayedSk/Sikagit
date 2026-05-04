@@ -31,6 +31,16 @@ router.post('/', (req: Request, res: Response) => {
   res.status(201).json({ success: true, data: project });
 });
 
+// Reorder projects (must be defined before /:id)
+router.post('/reorder', (req: Request, res: Response) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.some(x => typeof x !== 'string')) {
+    res.status(400).json({ success: false, error: 'ids must be an array of strings' });
+    return;
+  }
+  res.json({ success: true, data: db.reorderProjects(ids) });
+});
+
 // Update project
 router.patch('/:id', (req: Request, res: Response) => {
   const id = req.params.id as string;
