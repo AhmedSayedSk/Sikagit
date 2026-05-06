@@ -181,11 +181,8 @@ export async function getLog(
     '--decorate': 'full',
   });
 
-  // Get branches and tags for decoration
-  const [branchResult, tagResult] = await Promise.all([
-    git.branch(['-a', '--format=%(refname:short) %(objectname:short)']),
-    git.tag(['-l']),
-  ]);
+  // Get branches for decoration (tags fetched below in a single for-each-ref)
+  const branchResult = await git.branch(['-a', '--format=%(refname:short) %(objectname:short)']);
 
   const branchMap = new Map<string, string[]>();
   for (const b of branchResult.all) {
@@ -197,20 +194,28 @@ export async function getLog(
     }
   }
 
+  // One `git for-each-ref` call gets every tag→commit mapping at once.
+  // For annotated tags `*objectname:short` is the target commit; for lightweight
+  // tags it is empty and we fall back to `objectname:short` (which is already
+  // the commit). Replaces N sequential `git rev-parse --short <tag>` spawns.
   const tagMap = new Map<string, string[]>();
-  if (tagResult) {
-    const tags = tagResult.split('\n').filter(Boolean);
-    for (const tag of tags) {
-      try {
-        const result = await git.raw(['rev-parse', '--short', tag]);
-        const hash = result.trim();
-        const existing = tagMap.get(hash) || [];
-        existing.push(tag);
-        tagMap.set(hash, existing);
-      } catch {
-        // skip invalid tags
-      }
+  try {
+    const tagListing = await git.raw([
+      'for-each-ref',
+      '--format=%(refname:short) %(objectname:short) %(*objectname:short)',
+      'refs/tags',
+    ]);
+    for (const line of tagListing.split('\n')) {
+      if (!line) continue;
+      const [name, objHash, peeledHash] = line.split(' ');
+      const hash = peeledHash || objHash;
+      if (!name || !hash) continue;
+      const existing = tagMap.get(hash) || [];
+      existing.push(name);
+      tagMap.set(hash, existing);
     }
+  } catch {
+    // no tags or repo error — leave map empty
   }
 
   const headResult = await git.revparse(['HEAD']);
@@ -337,21 +342,27 @@ export async function getBranches(repoPath: string): Promise<GitBranch[]> {
 
 export async function getTags(repoPath: string): Promise<GitTag[]> {
   const git = getGit(repoPath);
-  const result = await git.tags(['--sort=-creatordate']);
-
+  // Single `for-each-ref` replaces N sequential `git rev-parse --short <tag>`
+  // calls. Sorted newest-first to match the previous --sort=-creatordate order.
+  // For annotated tags, *objectname:short is the target commit; for lightweight
+  // tags it's empty and we fall back to objectname:short (already the commit).
   const tags: GitTag[] = [];
-  for (const tagName of result.all) {
-    try {
-      const commit = await git.raw(['rev-parse', '--short', tagName]);
-      tags.push({
-        name: tagName,
-        commit: commit.trim(),
-      });
-    } catch {
-      tags.push({ name: tagName, commit: '' });
+  try {
+    const listing = await git.raw([
+      'for-each-ref',
+      '--sort=-creatordate',
+      '--format=%(refname:short) %(objectname:short) %(*objectname:short)',
+      'refs/tags',
+    ]);
+    for (const line of listing.split('\n')) {
+      if (!line) continue;
+      const [name, objHash, peeledHash] = line.split(' ');
+      if (!name) continue;
+      tags.push({ name, commit: peeledHash || objHash || '' });
     }
+  } catch {
+    // no tags or repo error
   }
-
   return tags;
 }
 
