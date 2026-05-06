@@ -12,25 +12,38 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
   };
 }
 
-// Batch status summary — before validateRepoPath since it takes multiple repos
+// Batch status summary — before validateRepoPath since it takes multiple repos.
+// Uses a small concurrency cap so 20+ repos don't all spawn `git status`
+// simultaneously (which thrashes disk I/O on WSL/Docker).
+const STATUS_SUMMARY_CONCURRENCY = 3;
+
 router.post('/status-summary', asyncHandler(async (req: Request, res: Response) => {
   const { repos } = req.body as { repos: { id: string; path: string }[] };
   if (!Array.isArray(repos)) {
     res.status(400).json({ success: false, error: 'repos array required' });
     return;
   }
+  const { normalizePath } = await import('../services/pathService');
   const results: Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean }> = {};
-  await Promise.all(
-    repos.map(async ({ id, path: repoPath }) => {
+  let cursor = 0;
+  const worker = async () => {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= repos.length) return;
+      const { id, path: repoPath } = repos[idx];
       try {
-        const { normalizePath } = await import('../services/pathService');
         const normalized = normalizePath(repoPath);
         results[id] = await gitService.getStatusSummary(normalized);
       } catch {
         // Skip repos that fail (e.g. deleted, not a git repo)
       }
-    })
+    }
+  };
+  const workers = Array.from(
+    { length: Math.min(STATUS_SUMMARY_CONCURRENCY, repos.length) },
+    () => worker()
   );
+  await Promise.all(workers);
   res.json({ success: true, data: results });
 }));
 
