@@ -35,35 +35,44 @@ const NUM_CPUS = require('os').cpus().length;
 const CLK_TCK = 100; // Standard on Linux
 const prevCpu = new Map<string, { total: number; time: number }>();
 
-function getDescendantPids(pid: number): number[] {
-  // Read all /proc entries and find children recursively
-  const pids: number[] = [pid];
+// Cache PPID map for the duration of a single stats tick so multiple
+// active processes share one /proc scan instead of one per process.
+let ppidMapCache: Map<number, number[]> | null = null;
+
+function buildPpidMap(): Map<number, number[]> {
+  const map = new Map<number, number[]>();
   try {
-    const entries = fs.readdirSync('/proc').filter(e => /^\d+$/.test(e));
-    const ppidMap = new Map<number, number[]>();
+    const entries = fs.readdirSync('/proc');
     for (const e of entries) {
+      if (!/^\d+$/.test(e)) continue;
       try {
         const stat = fs.readFileSync(`/proc/${e}/stat`, 'utf8');
-        const parts = stat.split(') ');
-        if (parts.length < 2) continue;
-        const fields = parts[1].split(' ');
+        const close = stat.lastIndexOf(') ');
+        if (close < 0) continue;
+        const fields = stat.slice(close + 2).split(' ');
         const ppid = parseInt(fields[1], 10);
         const p = parseInt(e, 10);
-        if (!ppidMap.has(ppid)) ppidMap.set(ppid, []);
-        ppidMap.get(ppid)!.push(p);
+        const arr = map.get(ppid);
+        if (arr) arr.push(p); else map.set(ppid, [p]);
       } catch { /* process gone */ }
     }
-    // BFS to find all descendants
-    const queue = [pid];
-    while (queue.length > 0) {
-      const p = queue.shift()!;
-      const children = ppidMap.get(p) || [];
-      for (const c of children) {
-        pids.push(c);
-        queue.push(c);
-      }
-    }
   } catch { /* ignore */ }
+  return map;
+}
+
+function getDescendantPids(pid: number): number[] {
+  const ppidMap = ppidMapCache ?? buildPpidMap();
+  const pids: number[] = [pid];
+  const queue = [pid];
+  while (queue.length > 0) {
+    const p = queue.shift()!;
+    const children = ppidMap.get(p);
+    if (!children) continue;
+    for (const c of children) {
+      pids.push(c);
+      queue.push(c);
+    }
+  }
   return pids;
 }
 
@@ -111,16 +120,24 @@ function readProcStats(key: string, pid: number): ProcStats | null {
   }
 }
 
-// Poll stats every 2 seconds for all active processes
+// Poll stats every 5 seconds for all active processes.
+// Skip the tick entirely when no processes are running so the /proc scan
+// (PPID map build) only happens when there's actually work to do.
 setInterval(() => {
-  for (const [key, child] of activeProcesses) {
-    if (!child.pid) continue;
-    const stats = readProcStats(key, child.pid);
-    if (stats) {
-      io.emit(`run:stats:${key}`, stats);
+  if (activeProcesses.size === 0) return;
+  ppidMapCache = buildPpidMap();
+  try {
+    for (const [key, child] of activeProcesses) {
+      if (!child.pid) continue;
+      const stats = readProcStats(key, child.pid);
+      if (stats) {
+        io.emit(`run:stats:${key}`, stats);
+      }
     }
+  } finally {
+    ppidMapCache = null;
   }
-}, 2000);
+}, 5000);
 
 // Strip non-color ANSI sequences (cursor movement, erase, etc.) but keep SGR color codes
 // eslint-disable-next-line no-control-regex
@@ -235,7 +252,9 @@ function processOutput(repoId: string, raw: string) {
         bufferOutput(repoId, plain + '\n');
         io.emit(`run:output:${repoId}`, plain + '\n');
       } else {
-        // Buffer — only emit the latest after 500ms of quiet
+        // Buffer — only emit the latest after 750ms of quiet.
+        // Reuses a single timer per repo (clearTimeout + setTimeout), so
+        // verbose progress streams never pile up multiple pending timers.
         state.pendingLine = plain;
         if (state.flushTimer) clearTimeout(state.flushTimer);
         state.flushTimer = setTimeout(() => {
@@ -246,7 +265,7 @@ function processOutput(repoId: string, raw: string) {
             state.pendingLine = '';
           }
           state.flushTimer = null;
-        }, 500);
+        }, 750);
       }
     } else {
       const state = getOutputState(repoId);
