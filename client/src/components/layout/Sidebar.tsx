@@ -468,13 +468,33 @@ export function Sidebar() {
     };
   }, [menuOpen]);
 
-  // Poll repo status summaries every 30 seconds
+  // Poll repo status summaries every 60 seconds.
+  // Pauses while the tab is hidden so a backgrounded window doesn't keep
+  // hitting the server (which fans out to a `git status` per repo).
   useEffect(() => {
     if (repos.length === 0) return;
     const repoList = repos.map(r => ({ id: r.id, path: r.path }));
-    fetchAllStatus(repoList);
-    const interval = setInterval(() => fetchAllStatus(repoList), 30_000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (interval) return;
+      fetchAllStatus(repoList);
+      interval = setInterval(() => fetchAllStatus(repoList), 60_000);
+    };
+    const stop = () => {
+      if (interval) { clearInterval(interval); interval = null; }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') start();
+      else stop();
+    };
+
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      stop();
+    };
   }, [repos, fetchAllStatus]);
 
   // Accordion: only one project expanded at a time; auto-expand project containing active repo

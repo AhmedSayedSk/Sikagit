@@ -215,10 +215,32 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
 
   const refresh = useCallback(() => fetchStatus(repoPath), [repoPath, fetchStatus]);
 
-  // Auto-poll status every 3 seconds to detect external file changes
+  // Auto-poll status every 7 seconds to detect external file changes.
+  // Pauses while the tab is hidden — `git status` on a large working tree
+  // is expensive on WSL/Docker and there's no point running it unseen.
   useEffect(() => {
-    const interval = setInterval(() => fetchStatus(repoPath), 3000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(() => fetchStatus(repoPath), 7000);
+    };
+    const stop = () => {
+      if (interval) { clearInterval(interval); interval = null; }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchStatus(repoPath); // catch up on changes that happened while hidden
+        start();
+      } else {
+        stop();
+      }
+    };
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      stop();
+    };
   }, [repoPath, fetchStatus]);
 
   // Prune checked files when they disappear from unstaged
