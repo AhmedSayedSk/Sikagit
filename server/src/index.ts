@@ -8,7 +8,6 @@ import projectsRouter from './routes/projects';
 import gitRouter from './routes/git';
 import browseRouter from './routes/browse';
 import aiRouter from './routes/ai';
-import runRouter from './routes/run';
 import { errorHandler } from './middleware/errorHandler';
 
 const PORT = process.env.PORT || 3001;
@@ -37,7 +36,6 @@ app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/git', gitRouter);
 app.use('/api/v1/browse', browseRouter);
 app.use('/api/v1/ai', aiRouter);
-app.use('/api/v1/run', runRouter);
 
 // Health check
 app.get('/api/v1/health', (_req, res) => {

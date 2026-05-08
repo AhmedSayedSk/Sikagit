@@ -58,9 +58,9 @@ router.delete('/:id', (req: Request, res: Response) => {
 
 router.patch('/:id', (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { name, group, avatar, runCommand, runPort, buildCommand, autoBuildOnCheckout, path: inputPath } = req.body;
+  const { name, group, avatar, path: inputPath } = req.body;
 
-  const patch: Partial<RepoBookmark> = { name, group, avatar, runCommand, runPort, buildCommand, autoBuildOnCheckout };
+  const patch: Partial<RepoBookmark> = { name, group, avatar };
 
   // If a new path is provided, validate it, check for conflicts, and derive related fields
   if (inputPath !== undefined) {

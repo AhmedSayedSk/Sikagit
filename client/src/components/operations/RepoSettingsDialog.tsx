@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, Play, GitBranch, FolderOpen, Upload, Trash2, FolderSearch } from 'lucide-react';
+import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, GitBranch, FolderOpen, Upload, Trash2, FolderSearch } from 'lucide-react';
 import type { RepoBookmark } from '@sikagit/shared';
 import { useRepoStore } from '../../store/repoStore';
 import { useStatusStore } from '../../store/statusStore';
@@ -12,11 +12,10 @@ interface RepoSettingsDialogProps {
   onClose: () => void;
 }
 
-type Tab = 'general' | 'run' | 'git';
+type Tab = 'general' | 'git';
 
 const tabs: { id: Tab; label: string; icon: typeof Bookmark }[] = [
   { id: 'general', label: 'General', icon: Bookmark },
-  { id: 'run', label: 'Run & Build', icon: Play },
   { id: 'git', label: 'Git', icon: GitBranch },
 ];
 
@@ -33,12 +32,6 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const [selectedIcon, setSelectedIcon] = useState(repo.avatar || '');
   const [repoPath, setRepoPath] = useState(repo.path);
   const [resolvingPath, setResolvingPath] = useState(false);
-
-  // Run command
-  const [runCommand, setRunCommand] = useState(repo.runCommand || '');
-  const [runPort, setRunPort] = useState(repo.runPort?.toString() || '');
-  const [buildCommand, setBuildCommand] = useState(repo.buildCommand || '');
-  const [autoBuildOnCheckout, setAutoBuildOnCheckout] = useState(repo.autoBuildOnCheckout || false);
 
   // Git config fields
   const [userName, setUserName] = useState('');
@@ -171,8 +164,6 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
     setSaving(true);
     setError('');
     try {
-      const parsedPort = runPort.trim() ? parseInt(runPort.trim(), 10) : null;
-
       // If path changed, update that first so the backend validates the new folder is a git repo.
       // The updated repo object returned will have the new path which we use for subsequent calls.
       let effectivePath = repo.path;
@@ -184,10 +175,6 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
       await updateRepo(repo.id, {
         name: name.trim() || repo.name,
         avatar: selectedIcon || undefined,
-        runCommand: runCommand.trim(),
-        runPort: parsedPort && parsedPort >= 1024 && parsedPort <= 65535 ? parsedPort : null,
-        buildCommand: buildCommand.trim(),
-        autoBuildOnCheckout,
       });
 
       const configs: [string, string][] = [
@@ -387,87 +374,6 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
                     </p>
                   )}
                 </div>
-              </div>
-            )}
-
-            {/* ─── Run Tab ─── */}
-            {activeTab === 'run' && (
-              <div className="space-y-5">
-                <div>
-                  <h3 className="text-sm font-medium text-text-primary mb-1">Run & Build</h3>
-                  <p className="text-xs text-text-muted mb-3">Configure commands to run and build this project from the toolbar</p>
-                </div>
-
-                {/* Run + Build side by side */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1.5 font-medium">Run Command</label>
-                    <input
-                      type="text"
-                      value={runCommand}
-                      onChange={e => setRunCommand(e.target.value)}
-                      placeholder="e.g. npm run dev"
-                      className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary font-mono text-xs focus:outline-none focus:border-accent"
-                    />
-                    <p className="text-[0.65rem] text-text-muted mt-1">Play button in toolbar</p>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1.5 font-medium">Build Command</label>
-                    <input
-                      type="text"
-                      value={buildCommand}
-                      onChange={e => setBuildCommand(e.target.value)}
-                      placeholder="e.g. npm run build"
-                      className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary font-mono text-xs focus:outline-none focus:border-accent"
-                    />
-                    <p className="text-[0.65rem] text-text-muted mt-1">Build button in toolbar</p>
-                  </div>
-                </div>
-
-                {/* Port */}
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5 font-medium">Port</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={runPort}
-                    onChange={e => setRunPort(e.target.value.replace(/\D/g, ''))}
-                    placeholder="e.g. 8080 (auto-detect if empty)"
-                    className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-text-primary font-mono text-xs focus:outline-none focus:border-accent"
-                  />
-                  <p className="text-[0.65rem] text-text-muted mt-1">
-                    Fixed port for the dev server. Appends <code className="text-accent/80">--port</code> and sets <code className="text-accent/80">PORT</code> env.
-                  </p>
-                </div>
-
-                {/* Environment info */}
-                <div className="border border-border rounded-lg p-3.5 bg-bg-primary">
-                  <p className="text-[0.7rem] text-text-muted mb-2.5 font-medium uppercase tracking-wider">Environment</p>
-                  <div className="space-y-2.5 text-xs text-text-secondary">
-                    <div className="flex items-center justify-between">
-                      <span>Run target</span>
-                      <span className={cn(
-                        'px-2 py-0.5 rounded text-[0.65rem] font-medium',
-                        repo.isWSL
-                          ? 'bg-accent/10 text-accent'
-                          : 'bg-success/10 text-success'
-                      )}>
-                        {repo.isWSL ? 'WSL' : 'Windows'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Working directory</span>
-                      <span className="font-mono text-[0.65rem] text-text-muted max-w-[260px] truncate" title={repo.path}>
-                        {repo.displayPath}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Port detection</span>
-                      <span className="text-[0.65rem] text-text-muted">Automatic from output</span>
-                    </div>
-                  </div>
-                </div>
-
               </div>
             )}
 

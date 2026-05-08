@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>The open-source, self-hosted Git GUI client you run in Docker.</strong><br/>
-  Visual commit graph, inline diff viewer, hunk-level staging, built-in terminal, AI commit messages — all from your browser.<br/>
+  Visual commit graph, inline diff viewer, hunk-level staging, AI commit messages — all from your browser.<br/>
   A free alternative to GitKraken, Sourcetree, and GitHub Desktop that runs on your own machine.
 </p>
 
@@ -28,9 +28,7 @@
 | Runs in Docker | No | No | No | **Yes** |
 | Visual commit graph | Yes | Yes | No | **Yes** |
 | Hunk-level staging | Yes | Yes | No | **Yes** |
-| Built-in terminal | No | No | No | **Yes** |
 | AI commit messages | No | No | No | **Yes** |
-| Run dev servers | No | No | No | **Yes** |
 | Free for personal use | Limited | Yes | Yes | **Yes** |
 | Open source | No | No | Partial | **Yes** |
 
@@ -79,15 +77,11 @@ npm run dev
 
 ### Project Management
 - **Multi-Repo Organization** — Group repositories under projects with collapsible tree navigation
-- **Run & Build** — Execute dev servers and builds with real-time terminal streaming
-- **Process Monitoring** — Live CPU/memory stats, port auto-detection, and lifecycle management
 - **AI Commits** — Generate commit messages and smart commit grouping from staged changes
 
 ### Developer Experience
-- **HMR in Docker** — Polling-based file watching for Next.js, Vite, CRA, Angular
 - **Binary Detection** — Prevents diff viewer freeze on video, audio, and archive files
 - **WSL Compatible** — Seamless Windows Subsystem for Linux path handling
-- **Clickable URLs** — Ctrl+Click terminal links to open in browser
 
 ---
 
@@ -97,21 +91,6 @@ npm run dev
 |:--------|:-----|:------------|
 | **Client** | `3200` | Web interface |
 | **API Server** | `3001` | Express + Socket.io |
-
-<details>
-<summary><strong>Reserved Dev Server Ports</strong></summary>
-
-The following ports are mapped through Docker so dev servers started by SikaGit are accessible from your host browser:
-
-| Ports | Typical Use |
-|:------|:------------|
-| `3000`, `3002`-`3010`, `3220` | React, Next.js, Node.js |
-| `4200` | Angular |
-| `5000`-`5001` | Flask, .NET |
-| `8080`-`8090` | Spring, Go, General |
-| `9000` | PHP, Portainer |
-
-</details>
 
 ---
 
@@ -160,17 +139,6 @@ The following ports are mapped through Docker so dev servers started by SikaGit 
 </details>
 
 <details>
-<summary><strong>Running Dev Servers</strong></summary>
-
-1. Open repo settings and set a **Run Command** (e.g., `npx next dev`)
-2. Optionally set a fixed **Port** to avoid conflicts
-3. Click **Play** — terminal output streams in real-time
-4. URLs in output are clickable (Ctrl+Click to open in browser)
-5. HMR works automatically via polling-based file watching
-
-</details>
-
-<details>
 <summary><strong>Remote Operations</strong></summary>
 
 1. Configure the remote URL in repository settings
@@ -213,7 +181,7 @@ sikagit/
 │
 ├── server/                  Express API server
 │   └── src/
-│       ├── routes/          git, repos, projects, run, browse, ai
+│       ├── routes/          git, repos, projects, browse, ai
 │       └── services/        Git, DB, storage services
 │
 ├── shared/                  Shared TypeScript types
@@ -268,26 +236,6 @@ sikagit/
 | `GET` | `/api/v1/git/diff` | File diff |
 | `GET` | `/api/v1/git/file` | File content at commit |
 
-### Run & Build
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| `POST` | `/api/v1/run/:id/start` | Start dev server |
-| `POST` | `/api/v1/run/:id/stop` | Stop dev server |
-| `GET` | `/api/v1/run/:id/status` | Process status & port |
-| `GET` | `/api/v1/run/:id/output` | Buffered terminal output |
-| `POST` | `/api/v1/run/:id/build` | Start build |
-| `POST` | `/api/v1/run/:id/build/stop` | Stop build |
-
-### Real-time Events (Socket.io)
-
-| Event | Description |
-|:------|:------------|
-| `run:output:{repoId}` | Terminal output lines |
-| `run:port:{repoId}` | Detected dev server port |
-| `run:stats:{repoId}` | CPU/memory (every 2s) |
-| `run:exit:{repoId}` | Process exit code |
-
 </details>
 
 <details>
@@ -334,7 +282,7 @@ Free for personal use. Commercial use requires a license from [Sikasio](https://
 
 ## Keywords
 
-`git gui` · `git client` · `self-hosted git` · `docker git gui` · `visual commit graph` · `diff viewer` · `git staging tool` · `gitkraken alternative` · `sourcetree alternative` · `github desktop alternative` · `open source git gui` · `react git client` · `node.js git gui` · `wsl git gui` · `ai commit messages` · `git branch visualization` · `hunk staging` · `dev server manager` · `docker developer tools`
+`git gui` · `git client` · `self-hosted git` · `docker git gui` · `visual commit graph` · `diff viewer` · `git staging tool` · `gitkraken alternative` · `sourcetree alternative` · `github desktop alternative` · `open source git gui` · `react git client` · `node.js git gui` · `wsl git gui` · `ai commit messages` · `git branch visualization` · `hunk staging`
 
 <p align="center">
   Built by <a href="https://sikasio.com"><strong>Sikasio</strong></a> — A design & development studio from Cairo, Egypt.

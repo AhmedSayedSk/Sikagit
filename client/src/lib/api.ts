@@ -25,7 +25,7 @@ export const api = {
     body: JSON.stringify({ path }),
   }),
   deleteRepo: (id: string) => request<void>(`/repos/${id}`, { method: 'DELETE' }),
-  updateRepo: (id: string, data: { name?: string; group?: string; avatar?: string; runCommand?: string; runPort?: number | null; buildCommand?: string; autoBuildOnCheckout?: boolean; path?: string }) =>
+  updateRepo: (id: string, data: { name?: string; group?: string; avatar?: string; path?: string }) =>
     request<import('@sikagit/shared').RepoBookmark>(`/repos/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -191,22 +191,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo, groups }),
     }),
-
-  // Run commands
-  runCommand: (repoId: string) => request<{ status: string; runTarget: string }>(`/run/${repoId}/start`, { method: 'POST' }),
-  stopCommand: (repoId: string) => request<void>(`/run/${repoId}/stop`, { method: 'POST' }),
-  runStatus: (repoId: string) => request<{ running: boolean; port: number | null; runTarget: string }>(`/run/${repoId}/status`),
-  runOutput: (repoId: string) => request<{ lines: string[] }>(`/run/${repoId}/output`),
-
-  // Build commands
-  buildCommand: (repoId: string) => request<{ status: string; runTarget: string }>(`/run/${repoId}/build`, { method: 'POST' }),
-  stopBuild: (repoId: string) => request<void>(`/run/${repoId}/build/stop`, { method: 'POST' }),
-  buildStatus: (repoId: string) => request<{ running: boolean; runTarget: string }>(`/run/${repoId}/build/status`),
-  buildOutput: (repoId: string) => request<{ lines: string[] }>(`/run/${repoId}/build/output`),
-  installDeps: (repoId: string) => request<{ status: string; runTarget: string }>(`/run/${repoId}/install`, { method: 'POST' }),
-  stopInstall: (repoId: string) => request<void>(`/run/${repoId}/install/stop`, { method: 'POST' }),
-  installStatus: (repoId: string) => request<{ running: boolean; runTarget: string }>(`/run/${repoId}/install/status`),
-  installOutput: (repoId: string) => request<{ lines: string[] }>(`/run/${repoId}/install/output`),
 
   // Browse — resolve a folder name + file fingerprint to an absolute server path
   resolveFolder: (folderName: string, files: string[]) =>
