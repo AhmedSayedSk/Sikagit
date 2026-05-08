@@ -5,8 +5,6 @@ import { useStatusStore } from '../../store/statusStore';
 import { useUIStore } from '../../store/uiStore';
 import { useConfirmStore } from '../../store/confirmStore';
 import { useToastStore } from '../../store/toastStore';
-import { useRunStore } from '../../store/runStore';
-import { useRepoStore } from '../../store/repoStore';
 import { api } from '../../lib/api';
 import { CommitRow } from './CommitRow';
 import type { BranchAction } from './CommitRow';
@@ -33,12 +31,8 @@ export function CommitList({ repoPath, onBranchAction }: CommitListProps) {
     colHashWidth, setColHashWidth,
   } = useUIStore();
   const confirm = useConfirmStore(s => s.confirm);
-  const confirmWithCheckbox = useConfirmStore(s => s.confirmWithCheckbox);
   const addToast = useToastStore(s => s.addToast);
   const fetchStatus = useStatusStore(s => s.fetchStatus);
-  const startBuild = useRunStore(s => s.startBuild);
-  const activeRepoId = useRepoStore(s => s.activeRepoId);
-  const activeRepo = useRepoStore(s => s.repos.find(r => r.id === activeRepoId));
   const [scrollTop, setScrollTop] = useState(0);
 
   const hasUncommitted = status && (
@@ -186,29 +180,18 @@ export function CommitList({ repoPath, onBranchAction }: CommitListProps) {
                 onDoubleClick={async () => {
                   const commit = commits[virtualItem.index];
                   if (commit.isHead) return;
-                  const hasBuildCmd = !!activeRepo?.buildCommand;
-                  const result = await confirmWithCheckbox({
+                  const confirmed = await confirm({
                     title: 'Checkout Commit',
                     message: `Move the current branch to commit ${truncateHash(commit.hash)}?\n\n"${commit.message}"\n\nThis will reset your branch to this commit. You can then force push to update the remote.`,
                     confirmLabel: 'Checkout',
                     variant: 'warning',
-                    ...(hasBuildCmd && {
-                      checkbox: {
-                        label: 'Build after checkout',
-                        defaultChecked: activeRepo?.autoBuildOnCheckout ?? false,
-                      },
-                    }),
                   });
-                  if (!result.confirmed) return;
+                  if (!confirmed) return;
                   try {
                     const { branch } = await api.checkout(repoPath, commit.hash);
                     addToast('success', `Switched to ${branch} at ${truncateHash(commit.hash)}`);
                     await fetchStatus(repoPath);
                     await fetchLog(repoPath);
-                    if (result.checkboxValue && activeRepo?.buildCommand) {
-                      addToast('info', 'Building after checkout...');
-                      startBuild(activeRepo.id);
-                    }
                   } catch (err: any) {
                     addToast('error', err.message);
                   }

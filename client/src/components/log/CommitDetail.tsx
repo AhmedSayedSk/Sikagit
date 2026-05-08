@@ -5,8 +5,6 @@ import { useLogStore } from '../../store/logStore';
 import { useStatusStore } from '../../store/statusStore';
 import { useToastStore } from '../../store/toastStore';
 import { useConfirmStore } from '../../store/confirmStore';
-import { useRunStore } from '../../store/runStore';
-import { useRepoStore } from '../../store/repoStore';
 import { api } from '../../lib/api';
 import { truncateHash } from '../../lib/utils';
 import { DiffView } from '../diff/DiffView';
@@ -20,11 +18,6 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   const fetchStatus = useStatusStore(s => s.fetchStatus);
   const addToast = useToastStore(s => s.addToast);
   const confirm = useConfirmStore(s => s.confirm);
-  const confirmWithCheckbox = useConfirmStore(s => s.confirmWithCheckbox);
-  const startBuild = useRunStore(s => s.startBuild);
-  const repos = useRepoStore(s => s.repos);
-  const activeRepoId = useRepoStore(s => s.activeRepoId);
-  const activeRepo = repos.find(r => r.id === activeRepoId);
   const isUncommitted = selectedCommit === '__uncommitted__';
   const commit = isUncommitted ? null : commits.find(c => c.hash === selectedCommit);
   const [diff, setDiff] = useState<string>('');
@@ -187,30 +180,19 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   };
 
   const handleCheckout = async () => {
-    const hasBuildCmd = !!activeRepo?.buildCommand;
-    const result = await confirmWithCheckbox({
+    const confirmed = await confirm({
       title: 'Checkout Commit',
       message: `Move the current branch to commit ${truncateHash(commit.hash)}?\n\n"${commit.message}"\n\nThis will reset your branch to this commit. You can then force push to update the remote.`,
       confirmLabel: 'Checkout',
       variant: 'warning',
-      ...(hasBuildCmd && {
-        checkbox: {
-          label: 'Build after checkout',
-          defaultChecked: activeRepo?.autoBuildOnCheckout ?? false,
-        },
-      }),
     });
-    if (!result.confirmed) return;
+    if (!confirmed) return;
     setCheckingOut(true);
     try {
       const { branch } = await api.checkout(repoPath, commit.hash);
       addToast('success', `Switched to ${branch} at ${truncateHash(commit.hash)}`);
       await fetchStatus(repoPath);
       await fetchLog(repoPath);
-      if (result.checkboxValue && activeRepo?.buildCommand) {
-        addToast('info', 'Building after checkout...');
-        startBuild(activeRepo.id);
-      }
     } catch (err: any) {
       addToast('error', err.message);
     } finally {

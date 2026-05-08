@@ -12,7 +12,7 @@ interface RepoState {
   fetchRepos: () => Promise<void>;
   addRepo: (path: string) => Promise<void>;
   removeRepo: (id: string) => Promise<void>;
-  updateRepo: (id: string, data: { name?: string; group?: string; avatar?: string; runCommand?: string; runPort?: number | null; buildCommand?: string; autoBuildOnCheckout?: boolean; path?: string }) => Promise<void>;
+  updateRepo: (id: string, data: { name?: string; group?: string; avatar?: string; path?: string }) => Promise<void>;
   setActiveRepo: (id: string) => void;
 }
 
@@ -54,7 +54,7 @@ export const useRepoStore = create<RepoState>()(
         }
       },
 
-      updateRepo: async (id: string, data: { name?: string; group?: string; avatar?: string; runCommand?: string; runPort?: number | null; buildCommand?: string; autoBuildOnCheckout?: boolean; path?: string }) => {
+      updateRepo: async (id: string, data: { name?: string; group?: string; avatar?: string; path?: string }) => {
         try {
           const updated = await api.updateRepo(id, data);
           set(state => ({
