@@ -11,13 +11,16 @@ interface RepoStatusSummary {
 
 interface RepoStatusState {
   summaries: Record<string, RepoStatusSummary>;
+  slowMode: Set<string>;            // ids currently flagged slow on the server
   inFlight: Set<string>;
   loadCached: (ids: string[]) => Promise<void>;
-  refreshSubset: (repos: { id: string; path: string }[]) => Promise<void>;
+  refreshSubset: (repos: { id: string; path: string; slowMode?: boolean }[]) => Promise<void>;
+  forceRefreshOne: (repo: { id: string; path: string }) => Promise<void>;
 }
 
 export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
   summaries: {},
+  slowMode: new Set<string>(),
   inFlight: new Set<string>(),
 
   loadCached: async (ids) => {
@@ -32,22 +35,63 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
 
   refreshSubset: async (repos) => {
     if (repos.length === 0) return;
-    const { inFlight } = get();
-    const filtered = repos.filter(r => !inFlight.has(r.id));
+    const { inFlight, slowMode } = get();
+    // Drop repos already in-flight OR already flagged slow on the client side.
+    // (Server also filters slow repos, but doing it here saves the round-trip.)
+    const filtered = repos.filter(r => !inFlight.has(r.id) && !slowMode.has(r.id));
     if (filtered.length === 0) return;
 
-    const next = new Set(inFlight);
-    for (const r of filtered) next.add(r.id);
-    set({ inFlight: next });
+    const nextInFlight = new Set(inFlight);
+    for (const r of filtered) nextInFlight.add(r.id);
+    set({ inFlight: nextInFlight });
 
     try {
       const data = await api.refreshStatusSummary(filtered);
-      set(state => ({ summaries: { ...state.summaries, ...data } }));
+      // Merge in successful summaries; sync slow-mode set from server response.
+      const summaries = { ...get().summaries };
+      const slow = new Set(get().slowMode);
+      for (const id of Object.keys(data)) {
+        const entry = data[id] as any;
+        if (entry.skipped) {
+          slow.add(id);
+        } else {
+          slow.delete(id);
+          summaries[id] = entry;
+        }
+      }
+      set({ summaries, slowMode: slow });
     } catch {
       // Refresh failures are non-critical — cached values remain visible.
     } finally {
       const after = new Set(get().inFlight);
       for (const r of filtered) after.delete(r.id);
+      set({ inFlight: after });
+    }
+  },
+
+  forceRefreshOne: async (repo) => {
+    const { inFlight } = get();
+    if (inFlight.has(repo.id)) return;
+    const nextInFlight = new Set(inFlight);
+    nextInFlight.add(repo.id);
+    set({ inFlight: nextInFlight });
+
+    try {
+      const data = await api.refreshStatusSummaryOne(repo.id, repo.path);
+      const summaries = { ...get().summaries };
+      const slow = new Set(get().slowMode);
+      if ((data as any).skipped) {
+        slow.add(repo.id);
+      } else {
+        slow.delete(repo.id);
+        summaries[repo.id] = data as RepoStatusSummary;
+      }
+      set({ summaries, slowMode: slow });
+    } catch {
+      // Network error — leave state untouched.
+    } finally {
+      const after = new Set(get().inFlight);
+      after.delete(repo.id);
       set({ inFlight: after });
     }
   },
@@ -72,8 +116,15 @@ function flush() {
   useRepoStatusStore.getState().refreshSubset(repos);
 }
 
-export function enqueueRepoRefresh(repo: { id: string; path: string }, opts?: { force?: boolean }) {
+export function enqueueRepoRefresh(
+  repo: { id: string; path: string; slowMode?: boolean },
+  opts?: { force?: boolean }
+) {
   if (!opts?.force) {
+    // Skip server-flagged slow repos AND client-cached slow flag.
+    const { slowMode } = useRepoStatusStore.getState();
+    if (repo.slowMode || slowMode.has(repo.id)) return;
+
     const cached = useRepoStatusStore.getState().summaries[repo.id];
     if (cached?.computedAt) {
       const age = Date.now() - new Date(cached.computedAt).getTime();
@@ -88,7 +139,7 @@ export function enqueueRepoRefresh(repo: { id: string; path: string }, opts?: { 
 
 const visible = new Map<string, string>(); // id → path
 
-export function markRepoVisible(repo: { id: string; path: string }) {
+export function markRepoVisible(repo: { id: string; path: string; slowMode?: boolean }) {
   visible.set(repo.id, repo.path);
   enqueueRepoRefresh(repo);
 }
