@@ -36,6 +36,7 @@ services:
       - DATA_DIR=/app/server/data
       - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no
       - AZURE_DEVOPS_PAT=${AZURE_DEVOPS_PAT:-}
+      - STATUS_TIMEOUT_MS=${STATUS_TIMEOUT_MS:-8000}
     restart: unless-stopped
 
   client:
