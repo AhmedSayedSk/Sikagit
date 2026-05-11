@@ -33,14 +33,37 @@ router.get('/status-summary/cached', (req: Request, res: Response) => {
 });
 
 // Compute fresh summaries for a subset of repos and write them through to the cache.
+// Skips repos flagged as slow_mode=1 unless force=true. On timeout, marks the
+// repo slow. On success against a previously-slow repo, clears the flag.
 router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Response) => {
-  const { repos } = req.body as { repos: { id: string; path: string }[] };
-  if (!Array.isArray(repos)) {
+  const { repos: incoming, force } = req.body as {
+    repos: { id: string; path: string }[];
+    force?: boolean;
+  };
+  if (!Array.isArray(incoming)) {
     res.status(400).json({ success: false, error: 'repos array required' });
     return;
   }
+
+  // Filter out slow repos unless caller explicitly forces.
+  const slowIds = force ? new Set<string>() : new Set(db.getSlowRepoIds());
+  const repos = incoming.filter(r => !slowIds.has(r.id));
+
   const { normalizePath } = await import('../services/pathService');
-  const results: Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean; computedAt: string }> = {};
+  const results: Record<string, {
+    ahead?: number; behind?: number; hasChanges?: boolean; hasRemote?: boolean;
+    computedAt?: string;
+    skipped?: boolean;
+    reason?: string;
+    slowMode?: boolean;
+    lastTimedOutAt?: string;
+  }> = {};
+
+  // Surface filtered repos in the response so the client can update its local state.
+  for (const id of slowIds) {
+    results[id] = { skipped: true, reason: 'slow', slowMode: true };
+  }
+
   let cursor = 0;
   const worker = async () => {
     while (true) {
@@ -51,9 +74,17 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
         const normalized = normalizePath(repoPath);
         const summary = await gitService.getStatusSummary(normalized);
         db.upsertRepoStatusSummary(id, summary);
-        results[id] = { ...summary, computedAt: new Date().toISOString() };
-      } catch {
-        // Skip repos that fail (e.g. deleted, not a git repo)
+        db.clearRepoSlow(id); // no-op if already 0
+        results[id] = { ...summary, computedAt: new Date().toISOString(), slowMode: false };
+      } catch (err) {
+        if (err instanceof gitService.GitTimeoutError) {
+          const at = new Date().toISOString();
+          db.markRepoSlow(id, at);
+          results[id] = { skipped: true, reason: 'slow', slowMode: true, lastTimedOutAt: at };
+        } else {
+          // Non-timeout failure (deleted repo, not a git repo, etc.) — leave entry absent
+          // so client falls back to its cached value silently. Matches prior behavior.
+        }
       }
     }
   };
