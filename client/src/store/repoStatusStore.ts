@@ -51,8 +51,8 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
       const summaries = { ...get().summaries };
       const slow = new Set(get().slowMode);
       for (const id of Object.keys(data)) {
-        const entry = data[id] as any;
-        if (entry.skipped) {
+        const entry = data[id];
+        if (entry.skipped === true) {
           slow.add(id);
         } else {
           slow.delete(id);
@@ -80,7 +80,7 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
       const data = await api.refreshStatusSummaryOne(repo.id, repo.path);
       const summaries = { ...get().summaries };
       const slow = new Set(get().slowMode);
-      if ((data as any).skipped) {
+      if (data.skipped === true) {
         slow.add(repo.id);
       } else {
         slow.delete(repo.id);

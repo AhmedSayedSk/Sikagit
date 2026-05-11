@@ -60,7 +60,17 @@ export const api = {
     ),
   // Refresh: compute fresh summaries for a subset and write-through to the cache.
   refreshStatusSummary: (repos: { id: string; path: string }[]) =>
-    request<Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean; computedAt: string }>>(
+    request<Record<string, {
+      ahead?: number;
+      behind?: number;
+      hasChanges?: boolean;
+      hasRemote?: boolean;
+      computedAt?: string;
+      skipped?: boolean;
+      reason?: string;
+      slowMode?: boolean;
+      lastTimedOutAt?: string;
+    }>>(
       '/git/status-summary/refresh',
       { method: 'POST', body: JSON.stringify({ repos }) }
     ),
