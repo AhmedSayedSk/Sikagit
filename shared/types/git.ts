@@ -79,6 +79,8 @@ export interface RepoBookmark {
   lastOpened?: string;
   group?: string;
   avatar?: string; // base64 data URL for repo logo
+  slowMode: boolean;          // true when getStatusSummary last timed out
+  lastTimedOutAt: string | null; // ISO timestamp of the last timeout, or null
 }
 
 export interface Project {
