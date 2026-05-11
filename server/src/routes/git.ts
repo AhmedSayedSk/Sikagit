@@ -59,8 +59,12 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
     lastTimedOutAt?: string;
   }> = {};
 
-  // Surface filtered repos in the response so the client can update its local state.
-  for (const id of slowIds) {
+  // Pre-populate skipped entries ONLY for repos that the caller asked about
+  // AND were filtered out due to slow_mode. This keeps the response shape
+  // scoped to the request — matches the spec's described behavior.
+  const requestedIds = new Set(incoming.map(r => r.id));
+  const filteredIds = [...slowIds].filter(id => requestedIds.has(id));
+  for (const id of filteredIds) {
     results[id] = { skipped: true, reason: 'slow', slowMode: true };
   }
 
