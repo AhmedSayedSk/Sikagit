@@ -10,11 +10,24 @@ import { ProjectDialog } from '../operations/ProjectDialog';
 import { ProjectsReorderDialog } from '../operations/ProjectsReorderDialog';
 import { useConfirmStore } from '../../store/confirmStore';
 import { useRepoStatusStore, enqueueRepoRefresh, markRepoVisible, markRepoHidden, refreshAllVisible } from '../../store/repoStatusStore';
+import { useToastStore } from '../../store/toastStore';
 import { cn } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
 
-function RepoStatusDot({ repoId }: { repoId: string }) {
+function RepoStatusDot({ repoId, slowMode }: { repoId: string; slowMode?: boolean }) {
   const summary = useRepoStatusStore(s => s.summaries[repoId]);
+
+  if (slowMode) {
+    return (
+      <span
+        style={{ opacity: 0.7, fontSize: 11, lineHeight: 1, width: 12, height: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+        title="Auto-refresh paused after timeout. Right-click → Refresh status to retry."
+        aria-label="slow"
+      >
+        ⏸
+      </span>
+    );
+  }
 
   const { ahead = 0, behind = 0, hasChanges = false, hasRemote = true } = summary ?? {};
   const noRemote = summary !== undefined && !hasRemote;
@@ -155,13 +168,25 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
   repoIdsRef.current = repoIds;
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const forceRefreshOne = useRepoStatusStore(s => s.forceRefreshOne);
+  const addToast = useToastStore(s => s.addToast);
+
+  const onRepoContextMenu = (repo: RepoBookmark) => async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!confirm(`Force refresh status for "${repo.name}"?`)) return;
+    await forceRefreshOne({ id: repo.id, path: repo.path });
+    if (useRepoStatusStore.getState().slowMode.has(repo.id)) {
+      addToast('info', `"${repo.name}" is still slow — try again later`);
+    }
+  };
+
   // Per-row IntersectionObserver: enqueue summary refresh when a row scrolls
   // into view. Disconnect & mark-hidden on unmount or when the repo set changes.
   useEffect(() => {
     const observed = projectRepos.map((repo, idx) => {
       const el = rowRefs.current[idx];
       if (!el) return null;
-      const repoRef = { id: repo.id, path: repo.path };
+      const repoRef = { id: repo.id, path: repo.path, slowMode: repo.slowMode };
       const obs = new IntersectionObserver(entries => {
         for (const e of entries) {
           if (e.isIntersecting) markRepoVisible(repoRef);
@@ -340,12 +365,13 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
                     isDragging && 'bg-bg-tertiary ring-1 ring-accent/30 cursor-grabbing'
                   )}
                   onPointerDown={e => handlePointerDown(e, idx)}
+                  onContextMenu={onRepoContextMenu(repo)}
                 >
                   {isCustomImage(repo.avatar) ? <img src={repo.avatar} alt="" className="w-3 h-3 rounded-sm object-contain flex-shrink-0" /> : (() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
                   <div className="flex-1 min-w-0">
                     <div className="truncate font-medium" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
                   </div>
-                  <RepoStatusDot repoId={repo.id} />
+                  <RepoStatusDot repoId={repo.id} slowMode={repo.slowMode} />
                 </div>
               </div>
             </div>
@@ -432,11 +458,13 @@ function RepoItem({ repo, isActive, onSelect }: {
 }) {
   const fontSize = useUIStore(s => s.fontSize);
   const rowRef = useRef<HTMLDivElement | null>(null);
+  const forceRefreshOne = useRepoStatusStore(s => s.forceRefreshOne);
+  const addToast = useToastStore(s => s.addToast);
 
   useEffect(() => {
     const el = rowRef.current;
     if (!el) return;
-    const repoRef = { id: repo.id, path: repo.path };
+    const repoRef = { id: repo.id, path: repo.path, slowMode: repo.slowMode };
     const obs = new IntersectionObserver(entries => {
       for (const e of entries) {
         if (e.isIntersecting) markRepoVisible(repoRef);
@@ -448,7 +476,20 @@ function RepoItem({ repo, isActive, onSelect }: {
       markRepoHidden(repoRef.id);
       obs.disconnect();
     };
-  }, [repo.id, repo.path]);
+  }, [repo.id, repo.path, repo.slowMode]);
+
+  const handleContextMenu = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    // Minimal context menu — for now just trigger the action directly.
+    // (A proper menu UI is future polish; this satisfies the spec's
+    // "right-click → refresh" affordance.)
+    if (!confirm(`Force refresh status for "${repo.name}"?`)) return;
+    await forceRefreshOne({ id: repo.id, path: repo.path });
+    // If still slow after the force refresh, tell the user.
+    if (useRepoStatusStore.getState().slowMode.has(repo.id)) {
+      addToast('info', `"${repo.name}" is still slow — try again later`);
+    }
+  };
 
   return (
     <div
@@ -460,12 +501,13 @@ function RepoItem({ repo, isActive, onSelect }: {
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
       )}
       onClick={onSelect}
+      onContextMenu={handleContextMenu}
     >
       {isCustomImage(repo.avatar) ? <img src={repo.avatar} alt="" className="w-3 h-3 rounded-sm object-contain flex-shrink-0" /> : (() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
       <div className="flex-1 min-w-0">
         <div className="truncate font-medium" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
       </div>
-      <RepoStatusDot repoId={repo.id} />
+      <RepoStatusDot repoId={repo.id} slowMode={repo.slowMode} />
     </div>
   );
 }
@@ -531,11 +573,11 @@ export function Sidebar() {
   }, []);
 
   // 3) Always refresh the active repo's summary when it changes, regardless of
-  //    its viewport state (force=true bypasses the staleness skip).
+  //    its viewport state (force=true bypasses the staleness skip and slow-mode filter).
   useEffect(() => {
     if (!activeRepoId) return;
     const active = repos.find(r => r.id === activeRepoId);
-    if (active) enqueueRepoRefresh({ id: active.id, path: active.path }, { force: true });
+    if (active) enqueueRepoRefresh({ id: active.id, path: active.path, slowMode: active.slowMode }, { force: true });
   }, [activeRepoId, repos]);
 
   // Accordion: only one project expanded at a time; auto-expand project containing active repo
