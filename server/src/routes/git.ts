@@ -3,6 +3,7 @@ import { validateRepoPath } from '../middleware/validatePath';
 import * as gitService from '../services/gitService';
 import { withRepoLock } from '../services/gitService';
 import { computeGraph } from '../services/graphService';
+import * as db from '../services/db';
 
 const router = Router();
 
@@ -17,14 +18,29 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
 // simultaneously (which thrashes disk I/O on WSL/Docker).
 const STATUS_SUMMARY_CONCURRENCY = 3;
 
-router.post('/status-summary', asyncHandler(async (req: Request, res: Response) => {
+// Read last-known summaries from SQLite. No git ops — instant.
+router.get('/status-summary/cached', (req: Request, res: Response) => {
+  const raw = String(req.query.ids || '').trim();
+  const ids = raw ? raw.split(',').filter(Boolean) : [];
+  const entries = db.getRepoStatusSummaries(ids);
+  // Shape the response to match the legacy summary type (drop computedAt for now).
+  const out: Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean; computedAt: string }> = {};
+  for (const id of Object.keys(entries)) {
+    const e = entries[id];
+    out[id] = { ahead: e.ahead, behind: e.behind, hasChanges: e.hasChanges, hasRemote: e.hasRemote, computedAt: e.computedAt };
+  }
+  res.json({ success: true, data: out });
+});
+
+// Compute fresh summaries for a subset of repos and write them through to the cache.
+router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Response) => {
   const { repos } = req.body as { repos: { id: string; path: string }[] };
   if (!Array.isArray(repos)) {
     res.status(400).json({ success: false, error: 'repos array required' });
     return;
   }
   const { normalizePath } = await import('../services/pathService');
-  const results: Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean }> = {};
+  const results: Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean; computedAt: string }> = {};
   let cursor = 0;
   const worker = async () => {
     while (true) {
@@ -33,7 +49,9 @@ router.post('/status-summary', asyncHandler(async (req: Request, res: Response) 
       const { id, path: repoPath } = repos[idx];
       try {
         const normalized = normalizePath(repoPath);
-        results[id] = await gitService.getStatusSummary(normalized);
+        const summary = await gitService.getStatusSummary(normalized);
+        db.upsertRepoStatusSummary(id, summary);
+        results[id] = { ...summary, computedAt: new Date().toISOString() };
       } catch {
         // Skip repos that fail (e.g. deleted, not a git repo)
       }

@@ -39,6 +39,15 @@ db.exec(`
     position INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (project_id, repo_id)
   );
+
+  CREATE TABLE IF NOT EXISTS repo_status_cache (
+    repo_id TEXT PRIMARY KEY REFERENCES repos(id) ON DELETE CASCADE,
+    ahead INTEGER NOT NULL DEFAULT 0,
+    behind INTEGER NOT NULL DEFAULT 0,
+    has_changes INTEGER NOT NULL DEFAULT 0,
+    has_remote INTEGER NOT NULL DEFAULT 0,
+    computed_at TEXT NOT NULL
+  );
 `);
 
 // Migrate: add position column to project_repos if missing
@@ -197,6 +206,60 @@ export function deleteRepo(id: string): boolean {
 
 export function repoExistsByPath(repoPath: string): boolean {
   return !!db.prepare('SELECT 1 FROM repos WHERE path = ?').get(repoPath);
+}
+
+// --- Repo status cache ---
+
+export interface RepoStatusCacheEntry {
+  ahead: number;
+  behind: number;
+  hasChanges: boolean;
+  hasRemote: boolean;
+  computedAt: string;
+}
+
+const stmtUpsertRepoStatus = db.prepare(
+  `INSERT INTO repo_status_cache (repo_id, ahead, behind, has_changes, has_remote, computed_at)
+   VALUES (@repoId, @ahead, @behind, @hasChanges, @hasRemote, @computedAt)
+   ON CONFLICT(repo_id) DO UPDATE SET
+     ahead = excluded.ahead,
+     behind = excluded.behind,
+     has_changes = excluded.has_changes,
+     has_remote = excluded.has_remote,
+     computed_at = excluded.computed_at`
+);
+
+export function getRepoStatusSummaries(ids: string[]): Record<string, RepoStatusCacheEntry> {
+  if (ids.length === 0) return {};
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db
+    .prepare(`SELECT repo_id, ahead, behind, has_changes, has_remote, computed_at FROM repo_status_cache WHERE repo_id IN (${placeholders})`)
+    .all(...ids) as any[];
+  const out: Record<string, RepoStatusCacheEntry> = {};
+  for (const r of rows) {
+    out[r.repo_id] = {
+      ahead: r.ahead,
+      behind: r.behind,
+      hasChanges: !!r.has_changes,
+      hasRemote: !!r.has_remote,
+      computedAt: r.computed_at,
+    };
+  }
+  return out;
+}
+
+export function upsertRepoStatusSummary(
+  repoId: string,
+  summary: { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean }
+): void {
+  stmtUpsertRepoStatus.run({
+    repoId,
+    ahead: summary.ahead,
+    behind: summary.behind,
+    hasChanges: summary.hasChanges ? 1 : 0,
+    hasRemote: summary.hasRemote ? 1 : 0,
+    computedAt: new Date().toISOString(),
+  });
 }
 
 // --- Project CRUD ---

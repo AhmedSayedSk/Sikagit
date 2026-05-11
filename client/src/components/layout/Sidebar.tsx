@@ -9,7 +9,7 @@ import { AppSettingsDialog } from '../operations/AppSettingsDialog';
 import { ProjectDialog } from '../operations/ProjectDialog';
 import { ProjectsReorderDialog } from '../operations/ProjectsReorderDialog';
 import { useConfirmStore } from '../../store/confirmStore';
-import { useRepoStatusStore } from '../../store/repoStatusStore';
+import { useRepoStatusStore, enqueueRepoRefresh, markRepoVisible, markRepoHidden, refreshAllVisible } from '../../store/repoStatusStore';
 import { cn } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
 
@@ -154,6 +154,31 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
   const repoIdsRef = useRef(repoIds);
   repoIdsRef.current = repoIds;
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Per-row IntersectionObserver: enqueue summary refresh when a row scrolls
+  // into view. Disconnect & mark-hidden on unmount or when the repo set changes.
+  useEffect(() => {
+    const observed = projectRepos.map((repo, idx) => {
+      const el = rowRefs.current[idx];
+      if (!el) return null;
+      const repoRef = { id: repo.id, path: repo.path };
+      const obs = new IntersectionObserver(entries => {
+        for (const e of entries) {
+          if (e.isIntersecting) markRepoVisible(repoRef);
+          else markRepoHidden(repoRef.id);
+        }
+      });
+      obs.observe(el);
+      return { repoId: repo.id, obs };
+    });
+    return () => {
+      for (const o of observed) {
+        if (!o) continue;
+        markRepoHidden(o.repoId);
+        o.obs.disconnect();
+      }
+    };
+  }, [projectRepos]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent, idx: number) => {
     // Only left click
@@ -406,8 +431,28 @@ function RepoItem({ repo, isActive, onSelect }: {
   onSelect: () => void;
 }) {
   const fontSize = useUIStore(s => s.fontSize);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    const repoRef = { id: repo.id, path: repo.path };
+    const obs = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (e.isIntersecting) markRepoVisible(repoRef);
+        else markRepoHidden(repoRef.id);
+      }
+    });
+    obs.observe(el);
+    return () => {
+      markRepoHidden(repoRef.id);
+      obs.disconnect();
+    };
+  }, [repo.id, repo.path]);
+
   return (
     <div
+      ref={rowRef}
       className={cn(
         'flex items-center gap-2 mx-1 px-2 py-1.5 cursor-pointer transition-colors rounded-md',
         isActive
@@ -428,7 +473,7 @@ function RepoItem({ repo, isActive, onSelect }: {
 export function Sidebar() {
   const { repos, activeRepoId, setActiveRepo } = useRepoStore();
   const { projects, fetchProjects, deleteProject, updateProject } = useProjectStore();
-  const fetchAllStatus = useRepoStatusStore(s => s.fetchAll);
+  const loadCached = useRepoStatusStore(s => s.loadCached);
   const fontSize = useUIStore(s => s.fontSize);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
@@ -453,18 +498,22 @@ export function Sidebar() {
     };
   }, [menuOpen]);
 
-  // Poll repo status summaries every 60 seconds.
-  // Pauses while the tab is hidden so a backgrounded window doesn't keep
-  // hitting the server (which fans out to a `git status` per repo).
+  // 1) On mount and whenever the repo set changes, populate badges instantly
+  //    from the SQLite cache. No git ops on the server.
   useEffect(() => {
     if (repos.length === 0) return;
-    const repoList = repos.map(r => ({ id: r.id, path: r.path }));
-    let interval: ReturnType<typeof setInterval> | null = null;
+    loadCached(repos.map(r => r.id));
+  }, [repos, loadCached]);
 
+  // 2) Refresh only the repos currently visible in the viewport on a 60s tick.
+  //    Pauses while the tab is hidden. Individual rows enqueue themselves when
+  //    they enter the viewport via IntersectionObserver (see RepoItem and
+  //    DraggableRepoList rows).
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
     const start = () => {
       if (interval) return;
-      fetchAllStatus(repoList);
-      interval = setInterval(() => fetchAllStatus(repoList), 60_000);
+      interval = setInterval(refreshAllVisible, 60_000);
     };
     const stop = () => {
       if (interval) { clearInterval(interval); interval = null; }
@@ -473,14 +522,21 @@ export function Sidebar() {
       if (document.visibilityState === 'visible') start();
       else stop();
     };
-
     if (document.visibilityState === 'visible') start();
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       stop();
     };
-  }, [repos, fetchAllStatus]);
+  }, []);
+
+  // 3) Always refresh the active repo's summary when it changes, regardless of
+  //    its viewport state (force=true bypasses the staleness skip).
+  useEffect(() => {
+    if (!activeRepoId) return;
+    const active = repos.find(r => r.id === activeRepoId);
+    if (active) enqueueRepoRefresh({ id: active.id, path: active.path }, { force: true });
+  }, [activeRepoId, repos]);
 
   // Accordion: only one project expanded at a time; auto-expand project containing active repo
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
