@@ -96,6 +96,39 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
   res.json({ success: true, data: results });
 }));
 
+// Single-repo force refresh — used by the sidebar's right-click "Refresh status (force)".
+// Always bypasses the slow-mode filter. Same per-call timeout applies, so this is safe
+// to call against a slow repo — at worst it re-marks slow.
+router.post('/status-summary/refresh-one', asyncHandler(async (req: Request, res: Response) => {
+  const { id, path: repoPath } = req.body as { id: string; path: string };
+  if (!id || !repoPath) {
+    res.status(400).json({ success: false, error: 'id and path required' });
+    return;
+  }
+  const { normalizePath } = await import('../services/pathService');
+  try {
+    const normalized = normalizePath(repoPath);
+    const summary = await gitService.getStatusSummary(normalized);
+    db.upsertRepoStatusSummary(id, summary);
+    db.clearRepoSlow(id);
+    res.json({
+      success: true,
+      data: { ...summary, computedAt: new Date().toISOString(), slowMode: false },
+    });
+  } catch (err) {
+    if (err instanceof gitService.GitTimeoutError) {
+      const at = new Date().toISOString();
+      db.markRepoSlow(id, at);
+      res.json({
+        success: true,
+        data: { skipped: true, reason: 'slow', slowMode: true, lastTimedOutAt: at },
+      });
+    } else {
+      res.status(500).json({ success: false, error: (err as Error).message });
+    }
+  }
+}));
+
 // All other git routes require a repo query param
 router.use(validateRepoPath);
 
