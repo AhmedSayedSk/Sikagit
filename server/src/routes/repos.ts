@@ -39,6 +39,8 @@ router.post('/', (req: Request, res: Response) => {
     isWSL: isWSLPath(normalized),
     lastOpened: new Date().toISOString(),
     group,
+    slowMode: false,
+    lastTimedOutAt: null,
   };
 
   db.insertRepo(bookmark);

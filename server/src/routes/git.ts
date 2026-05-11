@@ -86,8 +86,11 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
           db.markRepoSlow(id, at);
           results[id] = { skipped: true, reason: 'slow', slowMode: true, lastTimedOutAt: at };
         } else {
-          // Non-timeout failure (deleted repo, not a git repo, etc.) — leave entry absent
-          // so client falls back to its cached value silently. Matches prior behavior.
+          // Error contract: this route is called by the background auto-refresh
+          // sweep, so non-timeout errors (deleted repo, not a git repo, etc.) are
+          // silently dropped from results — the client falls back to its cached
+          // value. For user-initiated single-repo refreshes, see /refresh-one
+          // which surfaces failures via HTTP 500 instead.
         }
       }
     }
@@ -104,6 +107,10 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
 // Always bypasses the slow-mode filter. Same per-call timeout applies, so this is safe
 // to call against a slow repo — at worst it re-marks slow.
 router.post('/status-summary/refresh-one', asyncHandler(async (req: Request, res: Response) => {
+  // Error contract: this route is called from the user-initiated "Refresh status
+  // (force)" action. Non-timeout failures bubble up as HTTP 500 so the UI can
+  // surface a toast. Timeout failures, by contrast, are reported as
+  // {success:true, data:{skipped:true,...}} to match the batch route shape.
   const { id, path: repoPath } = req.body as { id: string; path: string };
   if (!id || !repoPath) {
     res.status(400).json({ success: false, error: 'id and path required' });
