@@ -23,7 +23,9 @@ db.exec(`
     is_wsl INTEGER NOT NULL DEFAULT 0,
     last_opened TEXT,
     "group" TEXT,
-    avatar TEXT
+    avatar TEXT,
+    slow_mode INTEGER NOT NULL DEFAULT 0,
+    last_timed_out_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS projects (
@@ -49,6 +51,16 @@ db.exec(`
     computed_at TEXT NOT NULL
   );
 `);
+
+// --- Additive migration: repos.slow_mode / repos.last_timed_out_at ---
+const repoCols = db.prepare("PRAGMA table_info(repos)").all() as { name: string }[];
+const repoColNames = new Set(repoCols.map(c => c.name));
+if (!repoColNames.has('slow_mode')) {
+  db.exec('ALTER TABLE repos ADD COLUMN slow_mode INTEGER NOT NULL DEFAULT 0');
+}
+if (!repoColNames.has('last_timed_out_at')) {
+  db.exec('ALTER TABLE repos ADD COLUMN last_timed_out_at TEXT');
+}
 
 // Migrate: add position column to project_repos if missing
 const prCols = db.prepare("PRAGMA table_info(project_repos)").all() as { name: string }[];
@@ -146,11 +158,13 @@ function rowToRepo(row: any): RepoBookmark {
     lastOpened: row.last_opened ?? undefined,
     group: row.group ?? undefined,
     avatar: row.avatar || undefined,
+    slowMode: !!row.slow_mode,
+    lastTimedOutAt: row.last_timed_out_at ?? null,
   };
 }
 
-const stmtAllRepos = db.prepare('SELECT id, path, display_path, name, is_wsl, last_opened, "group", avatar FROM repos');
-const stmtRepoById = db.prepare('SELECT id, path, display_path, name, is_wsl, last_opened, "group", avatar FROM repos WHERE id = ?');
+const stmtAllRepos = db.prepare('SELECT id, path, display_path, name, is_wsl, last_opened, "group", avatar, slow_mode, last_timed_out_at FROM repos');
+const stmtRepoById = db.prepare('SELECT id, path, display_path, name, is_wsl, last_opened, "group", avatar, slow_mode, last_timed_out_at FROM repos WHERE id = ?');
 const stmtInsertRepo = db.prepare(
   `INSERT INTO repos (id, path, display_path, name, is_wsl, last_opened, "group", avatar)
    VALUES (@id, @path, @displayPath, @name, @isWSL, @lastOpened, @group, @avatar)`
@@ -206,6 +220,30 @@ export function deleteRepo(id: string): boolean {
 
 export function repoExistsByPath(repoPath: string): boolean {
   return !!db.prepare('SELECT 1 FROM repos WHERE path = ?').get(repoPath);
+}
+
+// --- Slow-repo flag ---
+
+const stmtMarkRepoSlow = db.prepare(
+  'UPDATE repos SET slow_mode = 1, last_timed_out_at = @at WHERE id = @id'
+);
+const stmtClearRepoSlow = db.prepare(
+  'UPDATE repos SET slow_mode = 0 WHERE id = ?'
+);
+const stmtSlowRepoIds = db.prepare(
+  'SELECT id FROM repos WHERE slow_mode = 1'
+);
+
+export function markRepoSlow(repoId: string, at: string): void {
+  stmtMarkRepoSlow.run({ id: repoId, at });
+}
+
+export function clearRepoSlow(repoId: string): void {
+  stmtClearRepoSlow.run(repoId);
+}
+
+export function getSlowRepoIds(): string[] {
+  return (stmtSlowRepoIds.all() as { id: string }[]).map(r => r.id);
 }
 
 // --- Repo status cache ---
