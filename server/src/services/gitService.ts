@@ -5,6 +5,31 @@ import { join } from 'path';
 import type { GitCommit, GitBranch, GitTag, GitFileStatus, GitStatus } from '@sikagit/shared';
 import { normalizePath } from './pathService';
 
+const STATUS_TIMEOUT_MS = parseInt(process.env.STATUS_TIMEOUT_MS || '8000', 10);
+
+export class GitTimeoutError extends Error {
+  public readonly label: string;
+  public readonly ms: number;
+  constructor(label: string, ms: number) {
+    super(`${label} timed out after ${ms}ms`);
+    this.name = 'GitTimeoutError';
+    this.label = label;
+    this.ms = ms;
+  }
+}
+
+async function withTimeout<T>(fn: () => Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new GitTimeoutError(label, ms)), ms);
+  });
+  try {
+    return await Promise.race([fn(), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /**
  * Per-repo mutex to serialize git operations and prevent index.lock conflicts.
  * Uses a queue-based approach to guarantee strict sequential execution.
@@ -74,8 +99,13 @@ function getGit(repoPath: string): SimpleGit {
   // as raw UTF-8 instead of octal escapes like "\330\261\331\210...". Simple-git
   // forwards this to every command as `-c core.quotepath=false`, so status,
   // diff, log, etc. all return human-readable paths.
+  //
+  // timeout.block: kill the spawned git subprocess if it overruns. Belt-and-braces
+  // alongside withTimeout() — without this, a hung git child keeps running until
+  // OS reaper time even after our promise rejects, wasting a concurrency slot.
   return simpleGit(normalized, {
     config: ['core.quotepath=false'],
+    timeout: { block: STATUS_TIMEOUT_MS },
   });
 }
 
@@ -149,21 +179,23 @@ export async function getStatusSummary(repoPath: string): Promise<{
   hasChanges: boolean;
   hasRemote: boolean;
 }> {
-  const git = getGit(repoPath);
-  const status = await git.status();
-  let hasRemote = false;
-  try {
-    const url = (await git.raw(['config', '--local', 'remote.origin.url'])).trim();
-    hasRemote = url.length > 0;
-  } catch {
-    // No remote.origin.url configured
-  }
-  return {
-    ahead: status.ahead,
-    behind: status.behind,
-    hasChanges: status.files.length > 0,
-    hasRemote,
-  };
+  return withTimeout(async () => {
+    const git = getGit(repoPath);
+    const status = await git.status();
+    let hasRemote = false;
+    try {
+      const url = (await git.raw(['config', '--local', 'remote.origin.url'])).trim();
+      hasRemote = url.length > 0;
+    } catch {
+      // No remote.origin.url configured
+    }
+    return {
+      ahead: status.ahead,
+      behind: status.behind,
+      hasChanges: status.files.length > 0,
+      hasRemote,
+    };
+  }, STATUS_TIMEOUT_MS, 'getStatusSummary');
 }
 
 export async function getLog(
