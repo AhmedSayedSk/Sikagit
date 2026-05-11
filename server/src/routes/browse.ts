@@ -50,10 +50,10 @@ router.post('/resolve', (req: Request, res: Response) => {
     }
   }
 
-  // Phase 2: Shallow recursive search (max depth 2) in search dirs only
+  // Phase 2: Shallow recursive search (max depth 4) in search dirs only
   if (!match) {
     for (const dir of searchDirs) {
-      match = findFolder(dir, folderName, files || [], 0, 2);
+      match = findFolder(dir, folderName, files || [], 0, 4);
       if (match) break;
     }
   }
@@ -79,6 +79,7 @@ function getSearchDirs(): string[] {
   const devDirNames = [
     'projects', 'repos', 'dev', 'code', 'workspace', 'programming',
     'Documents', 'Desktop', 'src', 'git', 'github', 'work',
+    'Games', 'Apps', 'Tools',
   ];
 
   // Helper: add dir + its common dev subdirectories
@@ -114,6 +115,9 @@ function getSearchDirs(): string[] {
       for (const drive of drives) {
         if (!drive.isDirectory()) continue;
         const drivePath = path.join('/host/mnt', drive.name);
+
+        // Drive root itself — recursive search will descend (SKIP_DIRS prunes Windows/AppData/etc.)
+        dirs.push(drivePath);
 
         // Check for Users directory on each drive
         const usersDir = path.join(drivePath, 'Users');
@@ -152,6 +156,7 @@ function getSearchDirs(): string[] {
       for (const d of drives) {
         if (d.isDirectory() && d.name.length === 1) {
           const drivePath = path.join('/mnt', d.name);
+          dirs.push(drivePath);
           for (const devDir of devDirNames) {
             const full = path.join(drivePath, devDir);
             if (fs.existsSync(full)) dirs.push(full);
