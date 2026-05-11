@@ -64,6 +64,18 @@ export const api = {
       '/git/status-summary/refresh',
       { method: 'POST', body: JSON.stringify({ repos }) }
     ),
+  refreshStatusSummaryOne: (id: string, path: string) =>
+    request<{
+      ahead?: number; behind?: number; hasChanges?: boolean; hasRemote?: boolean;
+      computedAt?: string;
+      skipped?: boolean;
+      reason?: string;
+      slowMode?: boolean;
+      lastTimedOutAt?: string;
+    }>('/git/status-summary/refresh-one', {
+      method: 'POST',
+      body: JSON.stringify({ id, path }),
+    }),
   getLog: (repo: string, limit = 200, skip = 0) =>
     request<import('@sikagit/shared').GitCommit[]>(`/git/log?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}`),
   getGraph: (repo: string, limit = 200, skip = 0) =>
