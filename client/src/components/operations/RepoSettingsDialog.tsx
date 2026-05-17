@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, GitBranch, FolderOpen, Upload, Trash2, FolderSearch } from 'lucide-react';
+import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, GitBranch, FolderOpen, Upload, Trash2, FolderSearch, FolderKanban } from 'lucide-react';
 import type { RepoBookmark } from '@sikagit/shared';
 import { useRepoStore } from '../../store/repoStore';
 import { useStatusStore } from '../../store/statusStore';
+import { useProjectStore } from '../../store/projectStore';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { REPO_ICONS } from '../../lib/repoIcons';
@@ -24,6 +25,9 @@ type RemoteStatus = 'idle' | 'checking' | 'valid' | 'invalid';
 export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const updateRepo = useRepoStore(s => s.updateRepo);
   const fetchAll = useStatusStore(s => s.fetchAll);
+  const projects = useProjectStore(s => s.projects);
+  const addRepoToProject = useProjectStore(s => s.addRepoToProject);
+  const removeRepoFromProject = useProjectStore(s => s.removeRepoFromProject);
 
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
@@ -32,6 +36,17 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
   const [selectedIcon, setSelectedIcon] = useState(repo.avatar || '');
   const [repoPath, setRepoPath] = useState(repo.path);
   const [resolvingPath, setResolvingPath] = useState(false);
+
+  // Project membership — seed from projects whose repoIds include this repo
+  const initialProjectIds = projects.filter(p => p.repoIds.includes(repo.id)).map(p => p.id);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(initialProjectIds);
+  const originalProjectIdsRef = useRef<string[]>(initialProjectIds);
+
+  const toggleProject = (id: string) => {
+    setSelectedProjectIds(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
 
   // Git config fields
   const [userName, setUserName] = useState('');
@@ -188,6 +203,12 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
       if (remoteUrlChanged) {
         await api.setRemoteUrl(effectivePath, remoteUrl.trim());
       }
+
+      const original = originalProjectIdsRef.current;
+      const toAdd = selectedProjectIds.filter(id => !original.includes(id));
+      const toRemove = original.filter(id => !selectedProjectIds.includes(id));
+      for (const pid of toAdd) await addRepoToProject(pid, repo.id);
+      for (const pid of toRemove) await removeRepoFromProject(pid, repo.id);
 
       fetchAll(effectivePath);
       onClose();
@@ -374,6 +395,42 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
                     </p>
                   )}
                 </div>
+
+                {/* Project membership */}
+                {projects.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1.5 font-medium">
+                      Assign to Projects ({selectedProjectIds.length} selected)
+                    </label>
+                    <div className="border border-border rounded bg-bg-primary max-h-36 overflow-y-auto">
+                      {projects.map(project => (
+                        <label
+                          key={project.id}
+                          className={cn(
+                            'flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-bg-tertiary/30 transition-colors',
+                            selectedProjectIds.includes(project.id) && 'bg-accent/5'
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedProjectIds.includes(project.id)}
+                            onChange={() => toggleProject(project.id)}
+                            className="accent-accent rounded"
+                          />
+                          {project.avatar ? (
+                            <img src={project.avatar} alt="" className="w-4 h-4 rounded-sm object-cover flex-shrink-0" />
+                          ) : (
+                            <FolderKanban size={12} className="text-accent flex-shrink-0" />
+                          )}
+                          <span className="flex-1 truncate text-text-primary">{project.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[0.6rem] text-text-muted mt-1">
+                      Changes apply on save
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
