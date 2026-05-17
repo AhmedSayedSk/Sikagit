@@ -171,15 +171,59 @@ function CommitNode({
 
   return (
     <>
-      {/* Outer ring for HEAD */}
-      {isHead && (
+      {/* Water-droplet ripples for HEAD (last checked-out commit) */}
+      {isHead && [0, 1.75].map(i => (
         <circle
+          key={`ripple-${i}`}
           cx={x}
           cy={y}
           r={r + 2}
           fill="none"
           stroke={color}
           strokeWidth={2}
+          opacity={0}
+        >
+          <animate
+            attributeName="r"
+            from={r + 2}
+            to={r + 12}
+            dur="3.5s"
+            begin={`${i}s`}
+            repeatCount="indefinite"
+            calcMode="spline"
+            keyTimes="0;1"
+            keySplines="0.2 0.6 0.4 1"
+          />
+          <animate
+            attributeName="opacity"
+            from="0.9"
+            to="0"
+            dur="3.5s"
+            begin={`${i}s`}
+            repeatCount="indefinite"
+            calcMode="spline"
+            keyTimes="0;1"
+            keySplines="0.2 0.6 0.4 1"
+          />
+          <animate
+            attributeName="stroke-width"
+            from="2"
+            to="0.4"
+            dur="3.5s"
+            begin={`${i}s`}
+            repeatCount="indefinite"
+          />
+        </circle>
+      ))}
+      {/* Outer ring for HEAD (double-circle design) */}
+      {isHead && (
+        <circle
+          cx={x}
+          cy={y}
+          r={r + 4}
+          fill="none"
+          stroke={color}
+          strokeWidth={1.5}
         />
       )}
       {/* Main node */}
@@ -187,7 +231,7 @@ function CommitNode({
         cx={x}
         cy={y}
         r={r}
-        fill={isMerge ? '#1e2036' : color}
+        fill={!isMerge && !isHead ? '#1e2036' : color}
         stroke={color}
         strokeWidth={2}
       />
