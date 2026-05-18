@@ -31,11 +31,14 @@ interface StatusState {
   clearPendingForPaths: (paths: string[]) => void;
 }
 
+// Must match server's partition in gitService.getStatus — a file with both
+// staged AND working-tree changes (e.g. index='M' & workingDir='M') belongs in
+// BOTH staged and unstaged, so the panels stay in sync with the server view.
 function repartition(files: GitFileStatus[]): Pick<GitStatus, 'staged' | 'unstaged' | 'untracked'> {
   return {
     staged: files.filter(f => f.isStaged),
-    unstaged: files.filter(f => !f.isStaged && f.index !== '?'),
-    untracked: files.filter(f => !f.isStaged && f.index === '?'),
+    unstaged: files.filter(f => f.workingDir !== ' ' && f.workingDir !== '?' && f.workingDir !== '!'),
+    untracked: files.filter(f => f.index === '?' && f.workingDir === '?'),
   };
 }
 
@@ -65,8 +68,11 @@ function reconcileWithPending(
   for (const p of pendingStaged) {
     const f = fileMap.get(p);
     if (!f) continue;          // file vanished server-side — drop pending too
-    if (!f.isStaged) nextPendingStaged.add(p);  // server still behind — keep overlay
-    // else server agrees → drop from pending
+    // "Fully staged" requires both: file shows in the index AND has no further
+    // working-tree changes. For an MM file (already in index, also dirty), the
+    // server already reports isStaged=true pre-click — we must wait for the
+    // working tree to be consolidated (workingDir === ' ') before trusting it.
+    if (!f.isStaged || f.workingDir !== ' ') nextPendingStaged.add(p);
   }
   for (const p of pendingUnstaged) {
     const f = fileMap.get(p);
