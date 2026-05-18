@@ -12,6 +12,7 @@ import { SaveForLaterDialog } from '../operations/SaveForLaterDialog';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { useToastStore } from '../../store/toastStore';
+import { withActivity } from '../../store/activityStore';
 import type { GitFileStatus } from '@sikagit/shared';
 
 function getStatusIcon(index: string, workingDir: string) {
@@ -170,7 +171,7 @@ interface FileStatusPanelProps {
 }
 
 export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
-  const { status, fetchStatus, selectedFile, selectedFileSource, selectFile, checkedFiles, toggleFileCheck, setCheckedFiles, clearChecked } = useStatusStore();
+  const { status, fetchStatus, selectedFile, selectedFileSource, selectFile, checkedFiles, toggleFileCheck, setCheckedFiles, clearChecked, applyOptimisticStage, applyOptimisticUnstage, clearPendingForPaths } = useStatusStore();
   const selectedCommit = useLogStore(s => s.selectedCommit);
   const commitFiles = useLogStore(s => s.commitFiles);
   const commitFilesLoading = useLogStore(s => s.commitFilesLoading);
@@ -316,44 +317,57 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
       });
       if (!confirmed) return;
     }
+    selectNextInList(unstagedFiles, file.path, 'unstaged');
+    applyOptimisticStage([file.path]);
     try {
-      selectNextInList(unstagedFiles, file.path, 'unstaged');
-      await api.stageFiles(repoPath, [file.path]);
-      await refresh();
+      await withActivity(`Staging ${fileName(file.path)}`, () => api.stageFiles(repoPath, [file.path]));
+      refresh();
     } catch (err) {
+      clearPendingForPaths([file.path]);
+      await refresh();
       handleGitError(err, () => stageFile(file));
     }
   };
 
   const unstageFile = async (file: string) => {
+    selectNextInList(status?.staged ?? [], file, 'staged');
+    applyOptimisticUnstage([file]);
     try {
-      selectNextInList(status?.staged ?? [], file, 'staged');
-      await api.unstageFiles(repoPath, [file]);
-      await refresh();
+      await withActivity(`Unstaging ${fileName(file)}`, () => api.unstageFiles(repoPath, [file]));
+      refresh();
     } catch (err) {
+      clearPendingForPaths([file]);
+      await refresh();
       handleGitError(err, () => unstageFile(file));
     }
   };
 
   const stageAll = async () => {
     if (!status) return;
+    selectFile(null);
+    const files = [...status.unstaged.map(f => f.path), ...status.untracked.map(f => f.path)];
+    applyOptimisticStage(files);
     try {
-      selectFile(null);
-      const files = [...status.unstaged.map(f => f.path), ...status.untracked.map(f => f.path)];
-      await api.stageFiles(repoPath, files);
-      await refresh();
+      await withActivity(`Staging ${files.length} file${files.length !== 1 ? 's' : ''}`, () => api.stageFiles(repoPath, files));
+      refresh();
     } catch (err) {
+      clearPendingForPaths(files);
+      await refresh();
       handleGitError(err, () => stageAll());
     }
   };
 
   const unstageAll = async () => {
     if (!status) return;
+    selectFile(null);
+    const files = status.staged.map(f => f.path);
+    applyOptimisticUnstage(files);
     try {
-      selectFile(null);
-      await api.unstageFiles(repoPath, status.staged.map(f => f.path));
-      await refresh();
+      await withActivity(`Unstaging ${files.length} file${files.length !== 1 ? 's' : ''}`, () => api.unstageFiles(repoPath, files));
+      refresh();
     } catch (err) {
+      clearPendingForPaths(files);
+      await refresh();
       handleGitError(err, () => unstageAll());
     }
   };
@@ -406,8 +420,9 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
 
   if (!status) {
     return (
-      <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
-        Loading...
+      <div className="h-full w-full flex flex-col items-center justify-center gap-2 text-text-muted text-sm border-t border-border">
+        <Loader2 size={20} className="animate-spin text-accent" />
+        <span>Loading…</span>
       </div>
     );
   }
