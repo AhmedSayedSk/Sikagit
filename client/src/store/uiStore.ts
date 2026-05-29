@@ -21,6 +21,7 @@ interface UIState {
   colHashWidth: number;
   unstagedPanelRatio: number; // 0-1, proportion of unstaged panel width
   groupFilesByFolder: boolean;
+  autoFetchOnOpen: boolean;
   aiEnabled: boolean;
   aiApiKey: string;
   aiModel: string;
@@ -40,6 +41,7 @@ interface UIState {
   setColHashWidth: (width: number) => void;
   setUnstagedPanelRatio: (ratio: number) => void;
   setGroupFilesByFolder: (v: boolean) => void;
+  setAutoFetchOnOpen: (v: boolean) => void;
   setAiEnabled: (v: boolean) => void;
   setAiApiKey: (key: string) => void;
   setAiModel: (model: string) => void;
@@ -75,6 +77,7 @@ export const useUIStore = create<UIState>()(
       colHashWidth: 64,
       unstagedPanelRatio: 0.5,
       groupFilesByFolder: true,
+      autoFetchOnOpen: true,
       aiEnabled: false,
       aiApiKey: '',
       aiModel: 'gemini-2.5-pro',
@@ -113,6 +116,7 @@ export const useUIStore = create<UIState>()(
         unstagedPanelRatio: clamp(ratio, 0.15, 0.85),
       }),
       setGroupFilesByFolder: (v: boolean) => set({ groupFilesByFolder: v }),
+      setAutoFetchOnOpen: (v: boolean) => set({ autoFetchOnOpen: v }),
       setAiEnabled: (v: boolean) => set({ aiEnabled: v }),
       setAiApiKey: (key: string) => set({ aiApiKey: key }),
       setAiModel: (model: string) => set({ aiModel: model }),

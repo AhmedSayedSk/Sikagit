@@ -16,6 +16,8 @@ import { cn } from '../../lib/utils';
 import { api } from '../../lib/api';
 import { useToastStore } from '../../store/toastStore';
 import { useConfirmStore } from '../../store/confirmStore';
+import { useRepoStatusStore } from '../../store/repoStatusStore';
+import { shouldAutoFetch, markAutoFetched } from '../../lib/autoFetch';
 
 export function MainContent() {
   const repos = useRepoStore(s => s.repos);
@@ -46,6 +48,42 @@ export function MainContent() {
     }
   }, [repo?.id, fetchLog, fetchAll, selectCommit, selectFile]);
 
+  // Auto background-fetch on repo open (opt-out via Settings → General).
+  // Best-effort: keeps the behind/pull indicator honest without the user
+  // clicking Fetch. Silent on failure, rate-limited per repo (see autoFetch.ts).
+  useEffect(() => {
+    if (!repo) return;
+    if (!useUIStore.getState().autoFetchOnOpen) return;
+    if (!shouldAutoFetch(repo.id)) return;
+    // Skip repos we already know have no remote — a fetch would just error.
+    const summary = useRepoStatusStore.getState().summaries[repo.id];
+    if (summary?.hasRemote === false) return;
+
+    const { id, path } = repo;
+    let cancelled = false;
+    setRemoteAction('fetch'); // reuse the toolbar Fetch spinner
+    api.gitFetch(path)
+      .then(() => {
+        markAutoFetched(id); // only count successful fetches toward cooldown
+        if (cancelled) return; // repo switched mid-fetch — don't stomp new repo's state
+        fetchAll(path);
+        fetchLog(path);
+        useRepoStatusStore.getState().forceRefreshOne({ id, path });
+      })
+      .catch(() => {
+        // Background op: stay silent (offline, auth, no upstream, etc.).
+      })
+      .finally(() => {
+        if (!cancelled) setRemoteAction(prev => (prev === 'fetch' ? null : prev));
+      });
+
+    return () => {
+      cancelled = true;
+      setRemoteAction(prev => (prev === 'fetch' ? null : prev));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repo?.id]);
+
   const handleCommitListResize = useCallback((delta: number) => {
     setCommitListWidth(commitListWidth + delta);
   }, [commitListWidth, setCommitListWidth]);
@@ -58,6 +96,9 @@ export function MainContent() {
     if (!repo) return;
     fetchAll(repo.path);
     fetchLog(repo.path);
+    // Also refresh the sidebar status dot so its ahead/behind arrows reflect
+    // the new remote state immediately (otherwise it lags up to 30s).
+    useRepoStatusStore.getState().forceRefreshOne({ id: repo.id, path: repo.path });
   }, [repo, fetchAll, fetchLog]);
 
   const handleFetch = useCallback(async () => {

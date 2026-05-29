@@ -75,6 +75,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     diffLineHeight, setDiffLineHeight,
     theme, setTheme,
     groupFilesByFolder, setGroupFilesByFolder,
+    autoFetchOnOpen, setAutoFetchOnOpen,
     aiEnabled, setAiEnabled,
     aiApiKey, setAiApiKey,
     aiModel, setAiModel,
@@ -88,6 +89,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
   const [draftDiffLineHeight, setDraftDiffLineHeight] = useState(diffLineHeight);
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftGroupFiles, setDraftGroupFiles] = useState(groupFilesByFolder);
+  const [draftAutoFetch, setDraftAutoFetch] = useState(autoFetchOnOpen);
   const [draftAiEnabled, setDraftAiEnabled] = useState(aiEnabled);
   const [draftAiApiKey, setDraftAiApiKey] = useState(aiApiKey);
   const [draftAiModel, setDraftAiModel] = useState(aiModel);
@@ -99,6 +101,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     draftDiffLineHeight !== diffLineHeight ||
     draftTheme !== theme ||
     draftGroupFiles !== groupFilesByFolder ||
+    draftAutoFetch !== autoFetchOnOpen ||
     draftAiEnabled !== aiEnabled ||
     draftAiApiKey !== aiApiKey ||
     draftAiModel !== aiModel;
@@ -109,6 +112,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDiffLineHeight(draftDiffLineHeight);
     setTheme(draftTheme);
     setGroupFilesByFolder(draftGroupFiles);
+    setAutoFetchOnOpen(draftAutoFetch);
     setAiEnabled(draftAiEnabled);
     setAiApiKey(draftAiApiKey);
     setAiModel(draftAiModel);
@@ -121,6 +125,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDraftDiffLineHeight(3);
     setDraftTheme('dark');
     setDraftGroupFiles(true);
+    setDraftAutoFetch(true);
     setDraftAiEnabled(false);
     setDraftAiApiKey('');
     setDraftAiModel('gemini-2.5-pro');
@@ -217,6 +222,44 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
                           position: 'absolute',
                           top: 2,
                           left: draftGroupFiles ? 17 : 2,
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auto-fetch on open */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Auto-fetch on Open</h3>
+                      <p className="text-[0.6rem] text-text-muted">Run a background <span className="font-mono">git fetch</span> when you open a repo so the pull indicator is up to date</p>
+                    </div>
+                    <div
+                      onClick={() => setDraftAutoFetch(!draftAutoFetch)}
+                      style={{
+                        width: 32,
+                        height: 18,
+                        borderRadius: 9,
+                        backgroundColor: draftAutoFetch ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                        border: `1px solid ${draftAutoFetch ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        position: 'relative',
+                        transition: 'background-color 0.2s, border-color 0.2s',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: '50%',
+                          backgroundColor: '#fff',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                          position: 'absolute',
+                          top: 2,
+                          left: draftAutoFetch ? 17 : 2,
                           transition: 'left 0.2s',
                         }}
                       />
