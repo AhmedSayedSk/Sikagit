@@ -24,10 +24,10 @@ router.get('/status-summary/cached', (req: Request, res: Response) => {
   const ids = raw ? raw.split(',').filter(Boolean) : [];
   const entries = db.getRepoStatusSummaries(ids);
   // Shape the response to match the legacy summary type (drop computedAt for now).
-  const out: Record<string, { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean; computedAt: string }> = {};
+  const out: Record<string, { ahead: number; behind: number; hasChanges: boolean; hasStaged: boolean; hasUnstaged: boolean; hasRemote: boolean; computedAt: string }> = {};
   for (const id of Object.keys(entries)) {
     const e = entries[id];
-    out[id] = { ahead: e.ahead, behind: e.behind, hasChanges: e.hasChanges, hasRemote: e.hasRemote, computedAt: e.computedAt };
+    out[id] = { ahead: e.ahead, behind: e.behind, hasChanges: e.hasChanges, hasStaged: e.hasStaged, hasUnstaged: e.hasUnstaged, hasRemote: e.hasRemote, computedAt: e.computedAt };
   }
   res.json({ success: true, data: out });
 });
@@ -51,7 +51,7 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
 
   const { normalizePath } = await import('../services/pathService');
   const results: Record<string, {
-    ahead?: number; behind?: number; hasChanges?: boolean; hasRemote?: boolean;
+    ahead?: number; behind?: number; hasChanges?: boolean; hasStaged?: boolean; hasUnstaged?: boolean; hasRemote?: boolean;
     computedAt?: string;
     skipped?: boolean;
     reason?: string;

@@ -47,6 +47,8 @@ db.exec(`
     ahead INTEGER NOT NULL DEFAULT 0,
     behind INTEGER NOT NULL DEFAULT 0,
     has_changes INTEGER NOT NULL DEFAULT 0,
+    has_staged INTEGER NOT NULL DEFAULT 0,
+    has_unstaged INTEGER NOT NULL DEFAULT 0,
     has_remote INTEGER NOT NULL DEFAULT 0,
     computed_at TEXT NOT NULL
   );
@@ -60,6 +62,18 @@ if (!repoColNames.has('slow_mode')) {
 }
 if (!repoColNames.has('last_timed_out_at')) {
   db.exec('ALTER TABLE repos ADD COLUMN last_timed_out_at TEXT');
+}
+
+// --- Additive migration: repo_status_cache.has_staged / has_unstaged ---
+// Powers the 3-color sidebar change dot (green=unstaged, blue=staged, violet=both).
+// Existing rows default to 0/0 and self-heal on the next status refresh.
+const statusCacheCols = db.prepare("PRAGMA table_info(repo_status_cache)").all() as { name: string }[];
+const statusCacheColNames = new Set(statusCacheCols.map(c => c.name));
+if (!statusCacheColNames.has('has_staged')) {
+  db.exec('ALTER TABLE repo_status_cache ADD COLUMN has_staged INTEGER NOT NULL DEFAULT 0');
+}
+if (!statusCacheColNames.has('has_unstaged')) {
+  db.exec('ALTER TABLE repo_status_cache ADD COLUMN has_unstaged INTEGER NOT NULL DEFAULT 0');
 }
 
 // Migrate: add position column to project_repos if missing
@@ -252,17 +266,21 @@ export interface RepoStatusCacheEntry {
   ahead: number;
   behind: number;
   hasChanges: boolean;
+  hasStaged: boolean;
+  hasUnstaged: boolean;
   hasRemote: boolean;
   computedAt: string;
 }
 
 const stmtUpsertRepoStatus = db.prepare(
-  `INSERT INTO repo_status_cache (repo_id, ahead, behind, has_changes, has_remote, computed_at)
-   VALUES (@repoId, @ahead, @behind, @hasChanges, @hasRemote, @computedAt)
+  `INSERT INTO repo_status_cache (repo_id, ahead, behind, has_changes, has_staged, has_unstaged, has_remote, computed_at)
+   VALUES (@repoId, @ahead, @behind, @hasChanges, @hasStaged, @hasUnstaged, @hasRemote, @computedAt)
    ON CONFLICT(repo_id) DO UPDATE SET
      ahead = excluded.ahead,
      behind = excluded.behind,
      has_changes = excluded.has_changes,
+     has_staged = excluded.has_staged,
+     has_unstaged = excluded.has_unstaged,
      has_remote = excluded.has_remote,
      computed_at = excluded.computed_at`
 );
@@ -271,7 +289,7 @@ export function getRepoStatusSummaries(ids: string[]): Record<string, RepoStatus
   if (ids.length === 0) return {};
   const placeholders = ids.map(() => '?').join(',');
   const rows = db
-    .prepare(`SELECT repo_id, ahead, behind, has_changes, has_remote, computed_at FROM repo_status_cache WHERE repo_id IN (${placeholders})`)
+    .prepare(`SELECT repo_id, ahead, behind, has_changes, has_staged, has_unstaged, has_remote, computed_at FROM repo_status_cache WHERE repo_id IN (${placeholders})`)
     .all(...ids) as any[];
   const out: Record<string, RepoStatusCacheEntry> = {};
   for (const r of rows) {
@@ -279,6 +297,8 @@ export function getRepoStatusSummaries(ids: string[]): Record<string, RepoStatus
       ahead: r.ahead,
       behind: r.behind,
       hasChanges: !!r.has_changes,
+      hasStaged: !!r.has_staged,
+      hasUnstaged: !!r.has_unstaged,
       hasRemote: !!r.has_remote,
       computedAt: r.computed_at,
     };
@@ -288,19 +308,36 @@ export function getRepoStatusSummaries(ids: string[]): Record<string, RepoStatus
 
 export function upsertRepoStatusSummary(
   repoId: string,
-  summary: { ahead: number; behind: number; hasChanges: boolean; hasRemote: boolean }
+  summary: { ahead: number; behind: number; hasChanges: boolean; hasStaged: boolean; hasUnstaged: boolean; hasRemote: boolean }
 ): void {
   stmtUpsertRepoStatus.run({
     repoId,
     ahead: summary.ahead,
     behind: summary.behind,
     hasChanges: summary.hasChanges ? 1 : 0,
+    hasStaged: summary.hasStaged ? 1 : 0,
+    hasUnstaged: summary.hasUnstaged ? 1 : 0,
     hasRemote: summary.hasRemote ? 1 : 0,
     computedAt: new Date().toISOString(),
   });
 }
 
 // --- Project CRUD ---
+
+// Filter repoIds to only those still present in the repos table. Stale
+// client-side caches (e.g. when a repo was deleted in another tab/window)
+// can hand us IDs that no longer exist, which would otherwise crash the
+// project_repos insert with FOREIGN KEY constraint failed.
+const stmtRepoExists = db.prepare('SELECT 1 FROM repos WHERE id = ? LIMIT 1');
+function filterValidRepoIds(ids: string[]): { valid: string[]; missing: string[] } {
+  const valid: string[] = [];
+  const missing: string[] = [];
+  for (const id of ids) {
+    if (stmtRepoExists.get(id)) valid.push(id);
+    else missing.push(id);
+  }
+  return { valid, missing };
+}
 
 const stmtAllProjects = db.prepare('SELECT * FROM projects ORDER BY position, rowid');
 const stmtMaxProjectPosition = db.prepare('SELECT COALESCE(MAX(position), -1) AS maxPos FROM projects');
@@ -352,9 +389,13 @@ export function insertProject(project: Project): void {
       createdAt: project.createdAt,
       position: maxPos + 1,
     });
-    project.repoIds.forEach((repoId, position) => {
+    const { valid, missing } = filterValidRepoIds(project.repoIds);
+    valid.forEach((repoId, position) => {
       stmtInsertProjectRepo.run({ projectId: project.id, repoId, position });
     });
+    if (missing.length > 0) {
+      console.warn(`[db] insertProject(${project.id}): skipped ${missing.length} unknown repo id(s): ${missing.join(', ')}`);
+    }
   });
   insert();
 }
@@ -387,9 +428,13 @@ export function updateProject(
 
     if (data.repoIds !== undefined) {
       stmtDeleteProjectRepos.run(id);
-      data.repoIds.forEach((repoId, position) => {
+      const { valid, missing } = filterValidRepoIds(data.repoIds);
+      valid.forEach((repoId, position) => {
         stmtInsertProjectRepo.run({ projectId: id, repoId, position });
       });
+      if (missing.length > 0) {
+        console.warn(`[db] updateProject(${id}): skipped ${missing.length} unknown repo id(s): ${missing.join(', ')}`);
+      }
     }
   });
   update();

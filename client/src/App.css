@@ -30,6 +30,7 @@
   --color-status-renamed: #7ba4f7;
   --color-status-conflict: #ef6f6f;
   --color-status-untracked: #7c7fa0;
+  --color-status-both: #a07bf7;   /* repo has BOTH staged + unstaged changes */
 
   /* Lane colors — harmonized with blue-purple theme */
   --color-lane-0: #7ba4f7;

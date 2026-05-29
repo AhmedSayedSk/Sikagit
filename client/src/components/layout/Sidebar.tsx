@@ -14,6 +14,39 @@ import { useToastStore } from '../../store/toastStore';
 import { cn } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
 
+// Pure decision for the "uncommitted changes" dot color.
+//   unstaged-only (incl. untracked) → green   (text-success)
+//   staged-only                     → blue    (text-accent)
+//   both                            → violet  (--color-status-both)
+//   stale cache (pre-migration rows know hasChanges but not which kind) → green fallback
+// Returns null when the repo/project is clean.
+type ChangeKind = 'both' | 'staged' | 'unstaged' | 'changes';
+function changeDotKind(opts: { hasStaged: boolean; hasUnstaged: boolean; hasChanges: boolean }): ChangeKind | null {
+  if (opts.hasStaged && opts.hasUnstaged) return 'both';
+  if (opts.hasStaged) return 'staged';
+  if (opts.hasUnstaged) return 'unstaged';
+  if (opts.hasChanges) return 'changes';
+  return null;
+}
+const CHANGE_DOT_CLASS: Record<ChangeKind, string> = {
+  both: 'text-[var(--color-status-both)]',
+  staged: 'text-accent',
+  unstaged: 'text-success',
+  changes: 'text-success',
+};
+const REPO_DOT_TITLE: Record<ChangeKind, string> = {
+  both: 'Staged + unstaged changes',
+  staged: 'Staged changes (ready to commit)',
+  unstaged: 'Unstaged changes',
+  changes: 'Uncommitted changes',
+};
+const PROJECT_DOT_TITLE: Record<ChangeKind, string> = {
+  both: 'Repos have staged + unstaged changes',
+  staged: 'Repos have staged changes',
+  unstaged: 'Repos have unstaged changes',
+  changes: 'Repos with uncommitted changes',
+};
+
 function RepoStatusDot({ repoId, slowMode }: { repoId: string; slowMode?: boolean }) {
   const summary = useRepoStatusStore(s => s.summaries[repoId]);
 
@@ -29,8 +62,9 @@ function RepoStatusDot({ repoId, slowMode }: { repoId: string; slowMode?: boolea
     );
   }
 
-  const { ahead = 0, behind = 0, hasChanges = false, hasRemote = true } = summary ?? {};
+  const { ahead = 0, behind = 0, hasChanges = false, hasStaged = false, hasUnstaged = false, hasRemote = true } = summary ?? {};
   const noRemote = summary !== undefined && !hasRemote;
+  const changeKind = changeDotKind({ hasStaged, hasUnstaged, hasChanges });
   if (ahead === 0 && behind === 0 && !hasChanges && !noRemote) return null;
 
   return (
@@ -50,8 +84,8 @@ function RepoStatusDot({ repoId, slowMode }: { repoId: string; slowMode?: boolea
           <ArrowDown size={12} strokeWidth={2.5} />
         </span>
       )}
-      {hasChanges && (
-        <span title="Uncommitted changes" className="text-success">
+      {changeKind && (
+        <span title={REPO_DOT_TITLE[changeKind]} className={CHANGE_DOT_CLASS[changeKind]}>
           <CircleDot size={10} strokeWidth={2.5} />
         </span>
       )}
@@ -66,6 +100,8 @@ function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos:
   let totalAhead = 0;
   let totalBehind = 0;
   let anyChanges = false;
+  let anyStaged = false;
+  let anyUnstaged = false;
   let anyNoRemote = false;
 
   for (const id of projectRepoIds) {
@@ -74,10 +110,13 @@ function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos:
       totalAhead += s.ahead;
       totalBehind += s.behind;
       if (s.hasChanges) anyChanges = true;
+      if (s.hasStaged) anyStaged = true;
+      if (s.hasUnstaged) anyUnstaged = true;
       if (!s.hasRemote) anyNoRemote = true;
     }
   }
 
+  const changeKind = changeDotKind({ hasStaged: anyStaged, hasUnstaged: anyUnstaged, hasChanges: anyChanges });
   if (hidden || (totalAhead === 0 && totalBehind === 0 && !anyChanges && !anyNoRemote)) return null;
 
   return (
@@ -97,8 +136,8 @@ function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos:
           <ArrowDown size={12} strokeWidth={2.5} />
         </span>
       )}
-      {anyChanges && (
-        <span title="Repos with uncommitted changes" className="text-success">
+      {changeKind && (
+        <span title={PROJECT_DOT_TITLE[changeKind]} className={CHANGE_DOT_CLASS[changeKind]}>
           <CircleDot size={10} strokeWidth={2.5} />
         </span>
       )}

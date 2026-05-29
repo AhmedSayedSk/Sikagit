@@ -5,6 +5,8 @@ interface RepoStatusSummary {
   ahead: number;
   behind: number;
   hasChanges: boolean;
+  hasStaged: boolean;
+  hasUnstaged: boolean;
   hasRemote: boolean;
   computedAt?: string;
 }
@@ -56,7 +58,18 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
           slow.add(id);
         } else {
           slow.delete(id);
-          summaries[id] = entry;
+          // Refresh-response fields are all optional on the wire; a non-skipped
+          // entry always carries them, but normalize so the required-field
+          // RepoStatusSummary stays sound (esp. the staged/unstaged flags).
+          summaries[id] = {
+            ahead: entry.ahead ?? 0,
+            behind: entry.behind ?? 0,
+            hasChanges: entry.hasChanges ?? false,
+            hasStaged: entry.hasStaged ?? false,
+            hasUnstaged: entry.hasUnstaged ?? false,
+            hasRemote: entry.hasRemote ?? true,
+            computedAt: entry.computedAt,
+          };
         }
       }
       set({ summaries, slowMode: slow });
@@ -84,7 +97,15 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
         slow.add(repo.id);
       } else {
         slow.delete(repo.id);
-        summaries[repo.id] = data as RepoStatusSummary;
+        summaries[repo.id] = {
+          ahead: data.ahead ?? 0,
+          behind: data.behind ?? 0,
+          hasChanges: data.hasChanges ?? false,
+          hasStaged: data.hasStaged ?? false,
+          hasUnstaged: data.hasUnstaged ?? false,
+          hasRemote: data.hasRemote ?? true,
+          computedAt: data.computedAt,
+        };
       }
       set({ summaries, slowMode: slow });
     } catch {
