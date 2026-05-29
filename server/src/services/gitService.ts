@@ -177,6 +177,8 @@ export async function getStatusSummary(repoPath: string): Promise<{
   ahead: number;
   behind: number;
   hasChanges: boolean;
+  hasStaged: boolean;
+  hasUnstaged: boolean;
   hasRemote: boolean;
 }> {
   return withTimeout(async () => {
@@ -189,10 +191,20 @@ export async function getStatusSummary(repoPath: string): Promise<{
     } catch {
       // No remote.origin.url configured
     }
+    // Mirror getStatus()'s staged/unstaged semantics so the sidebar dot agrees
+    // with the staging panel. A file in the index (index letter not space/?/!)
+    // is staged. Anything with a non-space working-tree letter is unstaged —
+    // this naturally folds in untracked files (working_dir === '?').
+    const hasStaged = status.files.some(
+      f => f.index !== ' ' && f.index !== '?' && f.index !== '!'
+    );
+    const hasUnstaged = status.files.some(f => f.working_dir !== ' ');
     return {
       ahead: status.ahead,
       behind: status.behind,
       hasChanges: status.files.length > 0,
+      hasStaged,
+      hasUnstaged,
       hasRemote,
     };
   }, STATUS_TIMEOUT_MS, 'getStatusSummary');

@@ -45,7 +45,12 @@ export function CommitGraph({ commits, totalLanes, startIndex, endIndex, scrollO
   const extraBefore = Math.max(0, startIndex - 1);
   const extraAfter = Math.min(commits.length, endIndex + 1);
 
-  const firstCommit = commits[0];
+  // Uncommitted-changes line must anchor to HEAD — the parent of any new
+  // commit. commits[0] is just whatever sits on top of the log (often a
+  // newer commit on a different branch), which is not where new work lands.
+  const headIndex = commits.findIndex(c => c.isHead);
+  const headCommit = headIndex >= 0 ? commits[headIndex] : commits[0];
+  const headRow = headIndex >= 0 ? headIndex : 0;
 
   return (
     <svg
@@ -58,14 +63,14 @@ export function CommitGraph({ commits, totalLanes, startIndex, endIndex, scrollO
       }}
     >
       <g transform={`translate(0, ${-startIndex * ROW_HEIGHT})`}>
-        {/* Line from uncommitted row down to first commit */}
-        {hasUncommitted && startIndex === 0 && firstCommit && (
+        {/* Line from uncommitted row down to the HEAD commit's circle */}
+        {hasUncommitted && startIndex === 0 && headCommit && (
           <line
-            x1={laneX(firstCommit.lane)}
+            x1={laneX(headCommit.lane)}
             y1={0}
-            x2={laneX(firstCommit.lane)}
-            y2={rowY(0)}
-            stroke={getColor(firstCommit.laneColor)}
+            x2={laneX(headCommit.lane)}
+            y2={rowY(headRow)}
+            stroke={getColor(headCommit.laneColor)}
             strokeWidth={2}
             strokeLinecap="round"
           />

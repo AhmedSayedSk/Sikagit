@@ -41,6 +41,10 @@ export function CommitList({ repoPath, onBranchAction }: CommitListProps) {
     status.untracked.length > 0
   );
 
+  // Anchor the uncommitted-changes node to the HEAD commit, not commits[0]
+  // (the top of the log can be a newer commit on a branch you haven't checked out).
+  const headCommit = commits.find(c => c.isHead) ?? commits[0];
+
   const rowVirtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => parentRef.current,
@@ -116,10 +120,10 @@ export function CommitList({ repoPath, onBranchAction }: CommitListProps) {
               if (next) selectFile(null);
             }}
           >
-            {commits[0] && (
+            {headCommit && (
               <UncommittedNode
-                lane={commits[0].lane}
-                colorIndex={commits[0].laneColor}
+                lane={headCommit.lane}
+                colorIndex={headCommit.laneColor}
                 width={graphWidth}
               />
             )}
