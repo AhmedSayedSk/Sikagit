@@ -76,6 +76,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     theme, setTheme,
     groupFilesByFolder, setGroupFilesByFolder,
     autoFetchOnOpen, setAutoFetchOnOpen,
+    demoMode, setDemoMode,
     aiEnabled, setAiEnabled,
     aiApiKey, setAiApiKey,
     aiModel, setAiModel,
@@ -90,6 +91,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftGroupFiles, setDraftGroupFiles] = useState(groupFilesByFolder);
   const [draftAutoFetch, setDraftAutoFetch] = useState(autoFetchOnOpen);
+  const [draftDemoMode, setDraftDemoMode] = useState(demoMode);
   const [draftAiEnabled, setDraftAiEnabled] = useState(aiEnabled);
   const [draftAiApiKey, setDraftAiApiKey] = useState(aiApiKey);
   const [draftAiModel, setDraftAiModel] = useState(aiModel);
@@ -102,6 +104,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     draftTheme !== theme ||
     draftGroupFiles !== groupFilesByFolder ||
     draftAutoFetch !== autoFetchOnOpen ||
+    draftDemoMode !== demoMode ||
     draftAiEnabled !== aiEnabled ||
     draftAiApiKey !== aiApiKey ||
     draftAiModel !== aiModel;
@@ -113,6 +116,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setTheme(draftTheme);
     setGroupFilesByFolder(draftGroupFiles);
     setAutoFetchOnOpen(draftAutoFetch);
+    setDemoMode(draftDemoMode);
     setAiEnabled(draftAiEnabled);
     setAiApiKey(draftAiApiKey);
     setAiModel(draftAiModel);
@@ -126,6 +130,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDraftTheme('dark');
     setDraftGroupFiles(true);
     setDraftAutoFetch(true);
+    setDraftDemoMode(false);
     setDraftAiEnabled(false);
     setDraftAiApiKey('');
     setDraftAiModel('gemini-2.5-pro');
@@ -179,18 +184,6 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
           <div className="flex-1 overflow-y-auto p-4">
             {activeTab === 'general' && (
               <div className="space-y-5">
-                <div>
-                  <h3 className="text-xs font-medium text-text-primary mb-1">Interface Font Size</h3>
-                  <p className="text-[0.6rem] text-text-muted mb-3">Controls the base font size across the entire application</p>
-                  <SizeControl
-                    label="Font Size"
-                    value={draftFontSize}
-                    onChange={setDraftFontSize}
-                    min={10}
-                    max={20}
-                  />
-                </div>
-
                 {/* Group files by folder */}
                 <div>
                   <div className="flex items-center justify-between">
@@ -267,15 +260,42 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
                   </div>
                 </div>
 
-                {/* Preview */}
-                <div className="border border-border rounded-lg p-3 bg-bg-primary">
-                  <p className="text-[0.6rem] text-text-muted mb-2 font-medium uppercase tracking-wider">Preview</p>
-                  <p style={{ fontSize: draftFontSize }} className="text-text-primary">
-                    The quick brown fox jumps over the lazy dog
-                  </p>
-                  <p style={{ fontSize: draftFontSize * 0.85 }} className="text-text-secondary mt-1">
-                    Secondary text at {Math.round(draftFontSize * 0.85)}px
-                  </p>
+                {/* Demo / Privacy mode */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Demo / Privacy Mode</h3>
+                      <p className="text-[0.6rem] text-text-muted">Blur all project and repository names in the sidebar so you can safely screen-record a demo. Hover a row to reveal just that name.</p>
+                    </div>
+                    <div
+                      onClick={() => setDraftDemoMode(!draftDemoMode)}
+                      style={{
+                        width: 32,
+                        height: 18,
+                        borderRadius: 9,
+                        backgroundColor: draftDemoMode ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                        border: `1px solid ${draftDemoMode ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        position: 'relative',
+                        transition: 'background-color 0.2s, border-color 0.2s',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: '50%',
+                          backgroundColor: '#fff',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                          position: 'absolute',
+                          top: 2,
+                          left: draftDemoMode ? 17 : 2,
+                          transition: 'left 0.2s',
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -368,6 +388,29 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
                   </button>
                 </div>
                 <p className="text-[0.6rem] text-text-muted">Light theme coming soon</p>
+
+                <div>
+                  <h3 className="text-xs font-medium text-text-primary mb-1">Interface Font Size</h3>
+                  <p className="text-[0.6rem] text-text-muted mb-3">Controls the base font size across the entire application</p>
+                  <SizeControl
+                    label="Font Size"
+                    value={draftFontSize}
+                    onChange={setDraftFontSize}
+                    min={10}
+                    max={20}
+                  />
+                </div>
+
+                {/* Preview */}
+                <div className="border border-border rounded-lg p-3 bg-bg-primary">
+                  <p className="text-[0.6rem] text-text-muted mb-2 font-medium uppercase tracking-wider">Preview</p>
+                  <p style={{ fontSize: draftFontSize }} className="text-text-primary">
+                    The quick brown fox jumps over the lazy dog
+                  </p>
+                  <p style={{ fontSize: draftFontSize * 0.85 }} className="text-text-secondary mt-1">
+                    Secondary text at {Math.round(draftFontSize * 0.85)}px
+                  </p>
+                </div>
               </div>
             )}
 

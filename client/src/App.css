@@ -105,3 +105,31 @@ body {
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
 
+/* Demo / Privacy mode — blur sidebar project & repo names so the app can be
+   screen-recorded without leaking client/project identities. Only the name
+   text carries `.demo-blur`; icons/avatars stay sharp for navigation. The blur
+   is `em`-based so it scales with the chosen font size. Hovering a row (its
+   `.group` wrapper) temporarily reveals just that row's name. The transition
+   lives on `.demo-blur` itself so toggling the mode on AND off both animate. */
+.demo-blur {
+  transition: filter 0.15s ease;
+}
+
+.demo-mode .demo-blur {
+  /* `max()` guarantees a hard floor of 5px so small names (down to ~10px) stay
+     unreadable, while still scaling up with larger font sizes via the em term. */
+  filter: blur(max(5px, 0.45em));
+}
+
+.demo-mode .group:hover .demo-blur {
+  filter: blur(0);
+}
+
+/* While a sidebar repo row is being drag-reordered, the cursor sweeps across
+   neighbouring rows for drop-target detection — keep their names blurred so a
+   reorder doesn't flash names on camera. The extra `.demo-dragging` class (set
+   on the repo-list container during an active drag) outranks the hover rule. */
+.demo-mode .demo-dragging .group:hover .demo-blur {
+  filter: blur(max(5px, 0.45em));
+}
+

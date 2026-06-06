@@ -26,7 +26,7 @@ export function MainContent() {
   const repo = repos.find(r => r.id === activeRepoId);
   const { fetchLog, selectedCommit, selectCommit } = useLogStore();
   const { fetchAll, selectedFile, selectFile, status } = useStatusStore();
-  const { commitListWidth, setCommitListWidth, bottomPanelHeight, setBottomPanelHeight } = useUIStore();
+  const { commitListWidth, setCommitListWidth, bottomPanelHeight, setBottomPanelHeight, demoMode } = useUIStore();
   const projects = useProjectStore(s => s.projects);
   const confirm = useConfirmStore(s => s.confirm);
   const repoProject = activeRepoId ? projects.find(p => p.repoIds.includes(activeRepoId)) : undefined;
@@ -253,7 +253,7 @@ export function MainContent() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="h-10 bg-bg-secondary border-b border-border flex items-center px-3 gap-2">
+      <div className="group h-10 bg-bg-secondary border-b border-border flex items-center px-3 gap-2">
         {repoProject && (
           <div className="flex items-center gap-1.5">
             {repoProject.avatar ? (
@@ -261,11 +261,11 @@ export function MainContent() {
             ) : (
               <FolderKanban size={13} className="text-accent" />
             )}
-            <span className="text-sm font-semibold text-text-primary">{repoProject.name}</span>
+            <span className="text-sm font-semibold text-text-primary demo-blur">{repoProject.name}</span>
             <ChevronRight size={14} className="text-text-muted" />
           </div>
         )}
-        <span className="text-sm font-semibold text-text-primary">{repo.name}</span>
+        <span className="text-sm font-semibold text-text-primary demo-blur">{repo.name}</span>
         <div className="flex items-center gap-0.5 ml-1">
           <button
             onClick={() => setShowRepoSettings(true)}
@@ -278,7 +278,9 @@ export function MainContent() {
             onClick={async () => {
               const confirmed = await confirm({
                 title: 'Remove Repository',
-                message: `Are you sure you want to remove "${repo.name}" from SikaGit? This will not delete the repository files on disk.`,
+                message: demoMode
+                  ? 'Are you sure you want to remove this repository from SikaGit? This will not delete the repository files on disk.'
+                  : `Are you sure you want to remove "${repo.name}" from SikaGit? This will not delete the repository files on disk.`,
                 confirmLabel: 'Remove',
                 variant: 'danger',
               });
@@ -290,7 +292,7 @@ export function MainContent() {
             <Trash2 size={12} />
           </button>
         </div>
-        <span className="text-xs text-text-secondary flex-1">{repo.displayPath}</span>
+        <span className="text-xs text-text-secondary flex-1 demo-blur">{repo.displayPath}</span>
 
         {/* Remote actions */}
         {status && hasRemote && (

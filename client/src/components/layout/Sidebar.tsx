@@ -192,6 +192,7 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
   onReorderRepos: (repoIds: string[]) => void;
 }) {
   const fontSize = useUIStore(s => s.fontSize);
+  const demoMode = useUIStore(s => s.demoMode);
   const [dragState, setDragState] = useState<{
     fromIdx: number;
     toIdx: number;
@@ -212,10 +213,11 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
 
   const onRepoContextMenu = (repo: RepoBookmark) => async (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!confirm(`Force refresh status for "${repo.name}"?`)) return;
+    const repoLabel = demoMode ? 'this repository' : `"${repo.name}"`;
+    if (!confirm(`Force refresh status for ${repoLabel}?`)) return;
     await forceRefreshOne({ id: repo.id, path: repo.path });
     if (useRepoStatusStore.getState().slowMode.has(repo.id)) {
-      addToast('info', `"${repo.name}" is still slow — try again later`);
+      addToast('info', `${repoLabel} is still slow — try again later`);
     }
   };
 
@@ -370,7 +372,7 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
   };
 
   return (
-    <div ref={containerRef} className="relative ml-2 mt-0.5 mb-1.5">
+    <div ref={containerRef} className={cn('relative ml-2 mt-0.5 mb-1.5', dragState && 'demo-dragging')}>
       {/* Tree vertical line */}
       {projectRepos.length > 0 && (
         <div
@@ -397,7 +399,7 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
               <div className="ml-3">
                 <div
                   className={cn(
-                    'flex items-center gap-2 mx-1 px-2 py-1.5 cursor-pointer rounded-md select-none',
+                    'group flex items-center gap-2 mx-1 px-2 py-1.5 cursor-pointer rounded-md select-none',
                     repo.id === activeRepoId
                       ? 'bg-accent-emphasis/20 text-accent'
                       : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
@@ -408,7 +410,7 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
                 >
                   {isCustomImage(repo.avatar) ? <img src={repo.avatar} alt="" className="w-3 h-3 rounded-sm object-contain flex-shrink-0" /> : (() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
                   <div className="flex-1 min-w-0">
-                    <div className="truncate font-medium" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
+                    <div className="truncate font-medium demo-blur" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
                   </div>
                   <RepoStatusDot repoId={repo.id} slowMode={repo.slowMode} />
                 </div>
@@ -456,7 +458,7 @@ function ProjectSection({ project, repos, activeRepoId, expanded, onToggle, onSe
         ) : (
           <FolderKanban size={12} className="flex-shrink-0 text-accent" />
         )}
-        <span className="flex-1 truncate font-medium text-text-primary">{project.name}</span>
+        <span className="flex-1 truncate font-medium text-text-primary demo-blur">{project.name}</span>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
           <button
             onClick={e => { e.stopPropagation(); onEditProject(); }}
@@ -496,6 +498,7 @@ function RepoItem({ repo, isActive, onSelect }: {
   onSelect: () => void;
 }) {
   const fontSize = useUIStore(s => s.fontSize);
+  const demoMode = useUIStore(s => s.demoMode);
   const rowRef = useRef<HTMLDivElement | null>(null);
   const forceRefreshOne = useRepoStatusStore(s => s.forceRefreshOne);
   const addToast = useToastStore(s => s.addToast);
@@ -522,11 +525,12 @@ function RepoItem({ repo, isActive, onSelect }: {
     // Minimal context menu — for now just trigger the action directly.
     // (A proper menu UI is future polish; this satisfies the spec's
     // "right-click → refresh" affordance.)
-    if (!confirm(`Force refresh status for "${repo.name}"?`)) return;
+    const repoLabel = demoMode ? 'this repository' : `"${repo.name}"`;
+    if (!confirm(`Force refresh status for ${repoLabel}?`)) return;
     await forceRefreshOne({ id: repo.id, path: repo.path });
     // If still slow after the force refresh, tell the user.
     if (useRepoStatusStore.getState().slowMode.has(repo.id)) {
-      addToast('info', `"${repo.name}" is still slow — try again later`);
+      addToast('info', `${repoLabel} is still slow — try again later`);
     }
   };
 
@@ -534,7 +538,7 @@ function RepoItem({ repo, isActive, onSelect }: {
     <div
       ref={rowRef}
       className={cn(
-        'flex items-center gap-2 mx-1 px-2 py-1.5 cursor-pointer transition-colors rounded-md',
+        'group flex items-center gap-2 mx-1 px-2 py-1.5 cursor-pointer transition-colors rounded-md',
         isActive
           ? 'bg-accent-emphasis/20 text-accent'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
@@ -544,7 +548,7 @@ function RepoItem({ repo, isActive, onSelect }: {
     >
       {isCustomImage(repo.avatar) ? <img src={repo.avatar} alt="" className="w-3 h-3 rounded-sm object-contain flex-shrink-0" /> : (() => { const { Icon, label } = getRepoIcon(repo.avatar); return <span title={label} className="flex-shrink-0"><Icon size={12} /></span>; })()}
       <div className="flex-1 min-w-0">
-        <div className="truncate font-medium" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
+        <div className="truncate font-medium demo-blur" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
       </div>
       <RepoStatusDot repoId={repo.id} slowMode={repo.slowMode} />
     </div>
@@ -556,6 +560,7 @@ export function Sidebar() {
   const { projects, fetchProjects, deleteProject, updateProject } = useProjectStore();
   const loadCached = useRepoStatusStore(s => s.loadCached);
   const fontSize = useUIStore(s => s.fontSize);
+  const demoMode = useUIStore(s => s.demoMode);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project?: Project }>({ open: false });
@@ -712,7 +717,9 @@ export function Sidebar() {
                 onDeleteProject={async () => {
                   const confirmed = await confirm({
                     title: 'Delete Project',
-                    message: `Are you sure you want to delete "${project.name}"? Repositories will not be removed.`,
+                    message: demoMode
+                      ? 'Are you sure you want to delete this project? Repositories will not be removed.'
+                      : `Are you sure you want to delete "${project.name}"? Repositories will not be removed.`,
                     confirmLabel: 'Delete',
                     variant: 'danger',
                   });

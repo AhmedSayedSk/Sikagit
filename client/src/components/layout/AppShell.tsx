@@ -5,9 +5,10 @@ import { MainContent } from './MainContent';
 import { ResizeHandle } from '../ui/ResizeHandle';
 import { useRepoStore } from '../../store/repoStore';
 import { useUIStore } from '../../store/uiStore';
+import { cn } from '../../lib/utils';
 
 export function AppShell() {
-  const { sidebarOpen, sidebarWidth, setSidebarWidth, fontSize } = useUIStore();
+  const { sidebarOpen, sidebarWidth, setSidebarWidth, fontSize, demoMode } = useUIStore();
   const fetchRepos = useRepoStore(s => s.fetchRepos);
 
   useEffect(() => {
@@ -24,7 +25,7 @@ export function AppShell() {
   }, [sidebarWidth, setSidebarWidth]);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className={cn('flex flex-col h-screen overflow-hidden', demoMode && 'demo-mode')}>
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && (
           <>
