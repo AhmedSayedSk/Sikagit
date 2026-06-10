@@ -45,9 +45,14 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
     return;
   }
 
-  // Filter out slow repos unless caller explicitly forces.
-  const slowIds = force ? new Set<string>() : new Set(db.getSlowRepoIds());
-  const repos = incoming.filter(r => !slowIds.has(r.id));
+  // Previously we filtered out slow_mode repos here so a huge repo's `git status`
+  // couldn't stall the sweep. That's no longer necessary: slow_mode now drives a
+  // fast `--untracked-files=no` status (see gitService.statusOptionsFor), so slow
+  // repos compute quickly and SHOULD be included so their dashboard summary stays
+  // fresh. We keep slowIds only to annotate the response (the sidebar still shows
+  // a "slow" indicator), not to skip work.
+  const slowIds = new Set(db.getSlowRepoIds());
+  const repos = incoming;
 
   const { normalizePath } = await import('../services/pathService');
   const results: Record<string, {
@@ -59,13 +64,13 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
     lastTimedOutAt?: string;
   }> = {};
 
-  // Pre-populate skipped entries ONLY for repos that the caller asked about
-  // AND were filtered out due to slow_mode. This keeps the response shape
-  // scoped to the request — matches the spec's described behavior.
+  // Slow repos are no longer skipped — they compute via the fast -uno path.
+  // We still surface slowMode in the response so the sidebar can badge them.
+  // (Per-repo results below overwrite this with the computed summary.)
   const requestedIds = new Set(incoming.map(r => r.id));
-  const filteredIds = [...slowIds].filter(id => requestedIds.has(id));
-  for (const id of filteredIds) {
-    results[id] = { skipped: true, reason: 'slow', slowMode: true };
+  const slowRequested = [...slowIds].filter(id => requestedIds.has(id));
+  for (const id of slowRequested) {
+    results[id] = { slowMode: true };
   }
 
   let cursor = 0;
@@ -78,8 +83,12 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
         const normalized = normalizePath(repoPath);
         const summary = await gitService.getStatusSummary(normalized);
         db.upsertRepoStatusSummary(id, summary);
-        db.clearRepoSlow(id); // no-op if already 0
-        results[id] = { ...summary, computedAt: new Date().toISOString(), slowMode: false };
+        // NOTE: we intentionally do NOT clearRepoSlow here. slow_mode is what
+        // selects the fast --untracked-files=no status for huge repos; clearing
+        // it would revert them to the full -u walk and they'd time out again
+        // (flap). A repo only leaves slow_mode via the explicit user-initiated
+        // force refresh (refresh-one).
+        results[id] = { ...summary, computedAt: new Date().toISOString(), slowMode: slowIds.has(id) };
       } catch (err) {
         if (err instanceof gitService.GitTimeoutError) {
           const at = new Date().toISOString();
@@ -121,10 +130,17 @@ router.post('/status-summary/refresh-one', asyncHandler(async (req: Request, res
     const normalized = normalizePath(repoPath);
     const summary = await gitService.getStatusSummary(normalized);
     db.upsertRepoStatusSummary(id, summary);
-    db.clearRepoSlow(id);
+    // Do NOT auto-clear slow_mode here. For huge repos (e.g. ClientGame on the
+    // DrvFs /mnt/d mount) slow_mode is the switch that selects the fast
+    // --untracked-files=no status; clearing it reverts to the full -u walk and
+    // the repo times out again on the next sweep. slow_mode is now a benign,
+    // sticky "use the fast untracked-skip status" marker (the result is identical
+    // for these repos). Clear it manually in the DB only if a repo truly no longer
+    // needs it.
+    const stillSlow = db.isRepoSlowByPath(normalized);
     res.json({
       success: true,
-      data: { ...summary, computedAt: new Date().toISOString(), slowMode: false },
+      data: { ...summary, computedAt: new Date().toISOString(), slowMode: stillSlow },
     });
   } catch (err) {
     if (err instanceof gitService.GitTimeoutError) {
@@ -277,6 +293,17 @@ router.post('/checkout', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
   const result = await withRepoLock(repoPath, () => gitService.checkoutCommit(repoPath, hash));
+  res.json({ success: true, data: result });
+}));
+
+router.post('/switch-branch', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { branch } = req.body;
+  if (!branch) {
+    res.status(400).json({ success: false, error: 'Missing required field: branch' });
+    return;
+  }
+  const result = await withRepoLock(repoPath, () => gitService.switchBranch(repoPath, branch));
   res.json({ success: true, data: result });
 }));
 

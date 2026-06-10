@@ -4,8 +4,9 @@ import { readFileSync, readdirSync, existsSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path';
 import type { GitCommit, GitBranch, GitTag, GitFileStatus, GitStatus } from '@sikagit/shared';
 import { normalizePath } from './pathService';
+import { isRepoSlowByPath } from './db';
 
-const STATUS_TIMEOUT_MS = parseInt(process.env.STATUS_TIMEOUT_MS || '8000', 10);
+const STATUS_TIMEOUT_MS = parseInt(process.env.STATUS_TIMEOUT_MS || '20000', 10);
 
 export class GitTimeoutError extends Error {
   public readonly label: string;
@@ -126,9 +127,33 @@ async function hasCommits(repoPath: string): Promise<boolean> {
   }
 }
 
+
+/**
+ * Build the option array for simple-git's `.status()`.
+ *
+ * simple-git always hard-codes `status --porcelain -b -u --null`, where `-u`
+ * (= --untracked-files=all) forces a full walk/stat of the working tree. On the
+ * slow WSL /mnt/d (DrvFs) mount a huge tree like ClientGame (~800 MB) takes
+ * 15-18s for that walk and blows the status timeout.
+ *
+ * For repos flagged slow_mode we append `--untracked-files=no`. git takes the
+ * LAST untracked flag, so this overrides simple-git's `-u` and skips the
+ * untracked scan entirely while keeping `-b`/`--porcelain`/`--null` intact.
+ * ClientGame's .gitignore is `*` + a whitelist, so it has zero reportable
+ * untracked files — the result is identical, just near-instant.
+ */
+function statusOptionsFor(repoPath: string): string[] {
+  try {
+    if (isRepoSlowByPath(normalizePath(repoPath))) {
+      return ['--untracked-files=no'];
+    }
+  } catch { /* db not ready / unknown path -> default full status */ }
+  return [];
+}
+
 export async function getStatus(repoPath: string): Promise<GitStatus> {
   const git = getGit(repoPath);
-  const status = await git.status();
+  const status = await git.status(statusOptionsFor(repoPath));
 
   const normalized = normalizePath(repoPath);
   const mapFile = (f: { path: string; index: string; working_dir: string }): GitFileStatus => {
@@ -183,7 +208,7 @@ export async function getStatusSummary(repoPath: string): Promise<{
 }> {
   return withTimeout(async () => {
     const git = getGit(repoPath);
-    const status = await git.status();
+    const status = await git.status(statusOptionsFor(repoPath));
     let hasRemote = false;
     try {
       const url = (await git.raw(['config', '--local', 'remote.origin.url'])).trim();
@@ -364,6 +389,33 @@ export async function getLogWithParents(
     seen.add(c.hash);
     return true;
   });
+}
+
+/**
+ * Cleanly switch to an existing branch. Safe by design: it uses
+ * `git checkout <branch>` and never resets or force-moves refs, so an
+ * uncommitted-change conflict surfaces as an error instead of losing work.
+ * For a remote branch ("remotes/origin/feature") it checks out the matching
+ * local branch, creating a tracking branch when one doesn't exist yet.
+ */
+export async function switchBranch(repoPath: string, branch: string): Promise<{ branch: string }> {
+  const git = getGit(repoPath);
+
+  if (branch.startsWith('remotes/')) {
+    const tracked = branch.slice('remotes/'.length);                    // e.g. origin/feature
+    const slash = tracked.indexOf('/');
+    const localName = slash >= 0 ? tracked.slice(slash + 1) : tracked;  // e.g. feature
+    const localBranches = (await git.branchLocal()).all;
+    if (localBranches.includes(localName)) {
+      await git.checkout([localName]);
+    } else {
+      await git.checkout(['-b', localName, '--track', tracked]);
+    }
+    return { branch: localName };
+  }
+
+  await git.checkout([branch]);
+  return { branch };
 }
 
 export async function getBranches(repoPath: string): Promise<GitBranch[]> {

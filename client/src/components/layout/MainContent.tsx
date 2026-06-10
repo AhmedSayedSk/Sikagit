@@ -8,6 +8,7 @@ import { CommitDetail } from '../log/CommitDetail';
 import { FileDiffPanel } from '../diff/FileDiffPanel';
 import { FileStatusPanel } from '../files/FileStatusPanel';
 import { ResizeHandle } from '../ui/ResizeHandle';
+import { BranchSwitcher } from './BranchSwitcher';
 import { RepoSettingsDialog } from '../operations/RepoSettingsDialog';
 import { GitBranch, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2, Settings, Trash2 } from 'lucide-react';
 import { MergeDialog } from '../operations/MergeDialog';
@@ -292,6 +293,7 @@ export function MainContent() {
             <Trash2 size={12} />
           </button>
         </div>
+        <BranchSwitcher repoPath={repo.path} />
         <span className="text-xs text-text-secondary flex-1 demo-blur">{repo.displayPath}</span>
 
         {/* Remote actions */}

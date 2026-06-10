@@ -159,6 +159,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ repo, hash }),
   }),
+  switchBranch: (repo: string, branch: string) => request<{ branch: string }>('/git/switch-branch', {
+    method: 'POST',
+    body: JSON.stringify({ repo, branch }),
+  }),
   discardChanges: (repo: string, files: string[]) => request<void>('/git/discard', {
     method: 'POST',
     body: JSON.stringify({ repo, files }),
