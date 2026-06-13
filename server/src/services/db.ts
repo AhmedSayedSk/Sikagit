@@ -247,6 +247,9 @@ const stmtClearRepoSlow = db.prepare(
 const stmtSlowRepoIds = db.prepare(
   'SELECT id FROM repos WHERE slow_mode = 1'
 );
+const stmtIsRepoSlowByPath = db.prepare(
+  'SELECT slow_mode FROM repos WHERE path = ?'
+);
 
 export function markRepoSlow(repoId: string, at: string): void {
   stmtMarkRepoSlow.run({ id: repoId, at });
@@ -258,6 +261,15 @@ export function clearRepoSlow(repoId: string): void {
 
 export function getSlowRepoIds(): string[] {
   return (stmtSlowRepoIds.all() as { id: string }[]).map(r => r.id);
+}
+
+// Look up the slow_mode flag by repo path (the form the git routes carry).
+// Used by the git service to drop the untracked-file scan for huge/slow repos
+// (e.g. ClientGame on the DrvFs /mnt/d mount), which makes `git status` fast
+// without changing the result for those repos. Returns false for unknown paths.
+export function isRepoSlowByPath(repoPath: string): boolean {
+  const row = stmtIsRepoSlowByPath.get(repoPath) as { slow_mode: number } | undefined;
+  return !!(row && row.slow_mode);
 }
 
 // --- Repo status cache ---
