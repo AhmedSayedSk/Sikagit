@@ -10,9 +10,12 @@ import { CommitDialog } from '../operations/CommitDialog';
 import { SmartCommitDialog } from '../operations/SmartCommitDialog';
 import { SaveForLaterDialog } from '../operations/SaveForLaterDialog';
 import { api } from '../../lib/api';
+import { runBackgroundSmartCommit, describeSmartCommitSuccess } from '../../lib/smartCommit';
 import { cn } from '../../lib/utils';
 import { useToastStore } from '../../store/toastStore';
 import { withActivity } from '../../store/activityStore';
+import { useRepoStore } from '../../store/repoStore';
+import { useSmartCommitStore } from '../../store/smartCommitStore';
 import type { GitFileStatus } from '@sikagit/shared';
 
 function getStatusIcon(index: string, workingDir: string) {
@@ -179,6 +182,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const fetchCommitFiles = useLogStore(s => s.fetchCommitFiles);
   const selectCommitFile = useLogStore(s => s.selectCommitFile);
   const selectCommit = useLogStore(s => s.selectCommit);
+  const fetchLog = useLogStore(s => s.fetchLog);
   const stagedOpen = true;
   const unstagedOpen = true;
   const { unstagedPanelRatio, setUnstagedPanelRatio, groupFilesByFolder } = useUIStore();
@@ -188,8 +192,9 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const addToast = useToastStore(s => s.addToast);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [smartCommitOpen, setSmartCommitOpen] = useState(false);
+  const smartCommitRunning = useSmartCommitStore(s => s.running.has(repoPath));
   const [saveForLaterOpen, setSaveForLaterOpen] = useState(false);
-  const { aiEnabled, aiApiKey } = useUIStore();
+  const { aiEnabled, aiApiKey, aiModel, backgroundSmartCommit, backgroundSmartCommitPush } = useUIStore();
   const [collapsedUnstagedFolders, setCollapsedUnstagedFolders] = useState<Set<string>>(new Set());
   const [collapsedStagedFolders, setCollapsedStagedFolders] = useState<Set<string>>(new Set());
 
@@ -215,6 +220,48 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   }, [unstagedPanelRatio, setUnstagedPanelRatio]);
 
   const refresh = useCallback(() => fetchStatus(repoPath), [repoPath, fetchStatus]);
+
+  // Smart Commit button: open the review dialog, or — when background mode is on —
+  // analyze + commit (+ optionally push) directly. State is tracked per-repo so
+  // multiple repos can run in parallel; progress shows in the bottom status bar
+  // via withActivity, and the finishing run only refreshes the view if its repo
+  // is still the active one (so it can't clobber a repo you've switched to).
+  const handleSmartCommitClick = useCallback(async () => {
+    if (!backgroundSmartCommit) {
+      setSmartCommitOpen(true);
+      return;
+    }
+    const { start, finish } = useSmartCommitStore.getState();
+    if (useSmartCommitStore.getState().running.has(repoPath)) return; // already running for this repo
+    const repoName = repoPath.split(/[/\\]/).filter(Boolean).pop() || repoPath;
+    start(repoPath);
+    try {
+      const outcome = await withActivity(`Smart Commit: ${repoName}`, () =>
+        runBackgroundSmartCommit(repoPath, {
+          apiKey: aiApiKey,
+          model: aiModel,
+          push: backgroundSmartCommitPush,
+          setUpstream: !status?.tracking,
+        }),
+      );
+      if (outcome.previewError) {
+        addToast('error', `${outcome.previewError} — ${repoName}`);
+      } else if (!outcome.ok) {
+        addToast('error', `${outcome.error || 'Smart commit failed'} — ${repoName}`);
+      } else {
+        addToast('success', `${describeSmartCommitSuccess(outcome)} — ${repoName}`);
+        if (outcome.pushError) addToast('error', `${outcome.pushError} — ${repoName}`);
+      }
+    } catch (err: any) {
+      addToast('error', `${err?.message || 'Smart commit failed'} — ${repoName}`);
+    } finally {
+      finish(repoPath);
+      if (useRepoStore.getState().activeRepo()?.path === repoPath) {
+        fetchStatus(repoPath);
+        fetchLog(repoPath);
+      }
+    }
+  }, [backgroundSmartCommit, backgroundSmartCommitPush, repoPath, aiApiKey, aiModel, status?.tracking, addToast, fetchStatus, fetchLog]);
 
   // Auto-poll status every 7 seconds to detect external file changes.
   // Pauses while the tab is hidden — `git status` on a large working tree
@@ -651,17 +698,20 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
             </button>
             {aiEnabled && !!aiApiKey && (
               <button
-                onClick={() => setSmartCommitOpen(true)}
-                disabled={stagedFiles.length === 0}
+                onClick={handleSmartCommitClick}
+                disabled={stagedFiles.length === 0 || smartCommitRunning}
+                title={backgroundSmartCommit ? `Runs in the background${backgroundSmartCommitPush ? ' and pushes' : ''} — no review dialog` : undefined}
                 className={cn(
                   'px-1.5 py-0.5 rounded border flex items-center gap-1 transition-colors',
-                  stagedFiles.length > 0
+                  stagedFiles.length > 0 && !smartCommitRunning
                     ? 'border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 hover:border-accent/60 cursor-pointer'
                     : 'border-border bg-bg-tertiary text-text-muted/40 cursor-not-allowed'
                 )}
               >
-                <Sparkles size={10} />
-                <span className="text-[0.6rem] font-medium">Smart Commit</span>
+                {smartCommitRunning
+                  ? <Loader2 size={10} className="animate-spin" />
+                  : <Sparkles size={10} />}
+                <span className="text-[0.6rem] font-medium">{smartCommitRunning ? 'Committing…' : 'Smart Commit'}</span>
               </button>
             )}
           </div>

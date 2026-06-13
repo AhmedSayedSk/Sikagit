@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { X, Sparkles, Loader2, GitCommitHorizontal, ChevronDown, ChevronRight, Pencil, Check, ArrowUp } from 'lucide-react';
 import { api } from '../../lib/api';
+import { executeSmartCommit, describeSmartCommitSuccess } from '../../lib/smartCommit';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useUIStore } from '../../store/uiStore';
 import { useToastStore } from '../../store/toastStore';
-import { cn } from '../../lib/utils';
 
 interface SmartCommitDialogProps {
   repoPath: string;
@@ -47,14 +47,15 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
     setExecuting(true);
     setError('');
     try {
-      const result = await api.aiSmartCommitExecute(repoPath, groups);
-      const commitCount = result.commits?.length || 0;
-      addToast('success', `Created ${commitCount} commit${commitCount !== 1 ? 's' : ''}`);
+      const outcome = await executeSmartCommit(repoPath, groups, { push: false, setUpstream: false });
+      if (!outcome.ok) {
+        setError(outcome.error || 'Smart commit failed');
+        return;
+      }
+      addToast('success', describeSmartCommitSuccess(outcome));
       fetchStatus(repoPath);
       fetchLog(repoPath);
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Smart commit failed');
     } finally {
       setExecuting(false);
     }
@@ -65,21 +66,20 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
     setPushAfterCommit(true);
     setError('');
     try {
-      const result = await api.aiSmartCommitExecute(repoPath, groups);
-      const commitCount = result.commits?.length || 0;
-      try {
-        const setUpstream = !status?.tracking;
-        const pushResult = await api.gitPush(repoPath, setUpstream);
-        addToast('success', `Created ${commitCount} commit${commitCount !== 1 ? 's' : ''} and pushed`);
+      const outcome = await executeSmartCommit(repoPath, groups, { push: true, setUpstream: !status?.tracking });
+      if (!outcome.ok) {
+        setError(outcome.error || 'Smart commit failed');
+        return;
+      }
+      // Commits succeeded; report success and surface a push failure inline if any.
+      addToast('success', describeSmartCommitSuccess(outcome));
+      if (outcome.pushError) {
+        setError(outcome.pushError);
+      } else {
         onClose();
-      } catch (pushErr: any) {
-        addToast('success', `Created ${commitCount} commit${commitCount !== 1 ? 's' : ''}`);
-        setError(pushErr.message || 'Commits created but push failed');
       }
       fetchStatus(repoPath);
       fetchLog(repoPath);
-    } catch (err: any) {
-      setError(err.message || 'Smart commit failed');
     } finally {
       setExecuting(false);
       setPushAfterCommit(false);

@@ -80,6 +80,8 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     aiEnabled, setAiEnabled,
     aiApiKey, setAiApiKey,
     aiModel, setAiModel,
+    backgroundSmartCommit, setBackgroundSmartCommit,
+    backgroundSmartCommitPush, setBackgroundSmartCommitPush,
   } = useUIStore();
 
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -95,6 +97,8 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
   const [draftAiEnabled, setDraftAiEnabled] = useState(aiEnabled);
   const [draftAiApiKey, setDraftAiApiKey] = useState(aiApiKey);
   const [draftAiModel, setDraftAiModel] = useState(aiModel);
+  const [draftBgSmartCommit, setDraftBgSmartCommit] = useState(backgroundSmartCommit);
+  const [draftBgSmartCommitPush, setDraftBgSmartCommitPush] = useState(backgroundSmartCommitPush);
   const [showApiKey, setShowApiKey] = useState(false);
 
   const hasChanges =
@@ -107,7 +111,9 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     draftDemoMode !== demoMode ||
     draftAiEnabled !== aiEnabled ||
     draftAiApiKey !== aiApiKey ||
-    draftAiModel !== aiModel;
+    draftAiModel !== aiModel ||
+    draftBgSmartCommit !== backgroundSmartCommit ||
+    draftBgSmartCommitPush !== backgroundSmartCommitPush;
 
   const handleSave = () => {
     setFontSize(draftFontSize);
@@ -120,6 +126,8 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setAiEnabled(draftAiEnabled);
     setAiApiKey(draftAiApiKey);
     setAiModel(draftAiModel);
+    setBackgroundSmartCommit(draftBgSmartCommit);
+    setBackgroundSmartCommitPush(draftBgSmartCommitPush);
     onClose();
   };
 
@@ -134,6 +142,8 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDraftAiEnabled(false);
     setDraftAiApiKey('');
     setDraftAiModel('gemini-2.5-pro');
+    setDraftBgSmartCommit(false);
+    setDraftBgSmartCommitPush(false);
   };
 
   return (
@@ -481,6 +491,56 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
                       <option key={m.id} value={m.id}>{m.label}</option>
                     ))}
                   </select>
+                </div>
+
+                {/* Background Smart Commit */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Background Smart Commit</h3>
+                      <p className="text-[0.6rem] text-text-muted">Skip the review dialog — clicking <strong>Smart Commit</strong> analyzes your staged changes and creates the AI-suggested commits automatically.</p>
+                    </div>
+                    <div
+                      onClick={() => setDraftBgSmartCommit(!draftBgSmartCommit)}
+                      style={{
+                        width: 32, height: 18, borderRadius: 9,
+                        backgroundColor: draftBgSmartCommit ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                        border: `1px solid ${draftBgSmartCommit ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        cursor: 'pointer', flexShrink: 0, position: 'relative',
+                        transition: 'background-color 0.2s, border-color 0.2s',
+                      }}
+                    >
+                      <div style={{
+                        width: 12, height: 12, borderRadius: '50%', backgroundColor: '#fff',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.2)', position: 'absolute', top: 2,
+                        left: draftBgSmartCommit ? 17 : 2, transition: 'left 0.2s',
+                      }} />
+                    </div>
+                  </div>
+
+                  {/* Dependent sub-toggle: only meaningful when background mode is on */}
+                  <div className="flex items-center justify-between pl-4" style={{ opacity: draftBgSmartCommit ? 1 : 0.4 }}>
+                    <div>
+                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Also push after committing</h3>
+                      <p className="text-[0.6rem] text-text-muted">Run <span className="font-mono">git push</span> right after the background commit.</p>
+                    </div>
+                    <div
+                      onClick={() => { if (draftBgSmartCommit) setDraftBgSmartCommitPush(!draftBgSmartCommitPush); }}
+                      style={{
+                        width: 32, height: 18, borderRadius: 9,
+                        backgroundColor: draftBgSmartCommitPush ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
+                        border: `1px solid ${draftBgSmartCommitPush ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        cursor: draftBgSmartCommit ? 'pointer' : 'not-allowed', flexShrink: 0, position: 'relative',
+                        transition: 'background-color 0.2s, border-color 0.2s',
+                      }}
+                    >
+                      <div style={{
+                        width: 12, height: 12, borderRadius: '50%', backgroundColor: '#fff',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.2)', position: 'absolute', top: 2,
+                        left: draftBgSmartCommitPush ? 17 : 2, transition: 'left 0.2s',
+                      }} />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Info */}

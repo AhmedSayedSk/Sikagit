@@ -26,6 +26,8 @@ interface UIState {
   aiEnabled: boolean;
   aiApiKey: string;
   aiModel: string;
+  backgroundSmartCommit: boolean;       // run Smart Commit without the review dialog
+  backgroundSmartCommitPush: boolean;   // also push after the background commit (only if above is on)
   toggleSidebar: () => void;
   setActivePanel: (panel: Panel) => void;
   setTheme: (theme: Theme) => void;
@@ -47,6 +49,8 @@ interface UIState {
   setAiEnabled: (v: boolean) => void;
   setAiApiKey: (key: string) => void;
   setAiModel: (model: string) => void;
+  setBackgroundSmartCommit: (v: boolean) => void;
+  setBackgroundSmartCommitPush: (v: boolean) => void;
 }
 
 const SIDEBAR_MIN = 180;
@@ -84,6 +88,8 @@ export const useUIStore = create<UIState>()(
       aiEnabled: false,
       aiApiKey: '',
       aiModel: 'gemini-2.5-pro',
+      backgroundSmartCommit: false,
+      backgroundSmartCommitPush: false,
 
       toggleSidebar: () => set(state => ({ sidebarOpen: !state.sidebarOpen })),
       setActivePanel: (panel: Panel) => set({ activePanel: panel }),
@@ -124,6 +130,8 @@ export const useUIStore = create<UIState>()(
       setAiEnabled: (v: boolean) => set({ aiEnabled: v }),
       setAiApiKey: (key: string) => set({ aiApiKey: key }),
       setAiModel: (model: string) => set({ aiModel: model }),
+      setBackgroundSmartCommit: (v: boolean) => set({ backgroundSmartCommit: v }),
+      setBackgroundSmartCommitPush: (v: boolean) => set({ backgroundSmartCommitPush: v }),
     }),
     { name: 'sikagit-ui' }
   )
