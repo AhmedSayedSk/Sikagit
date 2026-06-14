@@ -15,6 +15,7 @@ import { cn } from '../../lib/utils';
 import { useToastStore } from '../../store/toastStore';
 import { withActivity } from '../../store/activityStore';
 import { useRepoStore } from '../../store/repoStore';
+import { useRepoStatusStore } from '../../store/repoStatusStore';
 import { useSmartCommitStore } from '../../store/smartCommitStore';
 import type { GitFileStatus } from '@sikagit/shared';
 
@@ -257,8 +258,12 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     } finally {
       finish(repoPath);
       if (useRepoStore.getState().activeRepo()?.path === repoPath) {
-        fetchStatus(repoPath);
+        fetchStatus(repoPath); // also refreshes this repo's sidebar dot via statusStore
         fetchLog(repoPath);
+      } else {
+        // Repo isn't the active one — refresh just its sidebar status dot directly.
+        const repo = useRepoStore.getState().repos.find(r => r.path === repoPath);
+        if (repo) useRepoStatusStore.getState().forceRefreshOne(repo);
       }
     }
   }, [backgroundSmartCommit, backgroundSmartCommitPush, repoPath, aiApiKey, aiModel, status?.tracking, addToast, fetchStatus, fetchLog]);

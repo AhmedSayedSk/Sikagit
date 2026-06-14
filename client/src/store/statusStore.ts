@@ -1,6 +1,26 @@
 import { create } from 'zustand';
 import type { GitStatus, GitBranch, GitTag, GitFileStatus } from '@sikagit/shared';
 import { api } from '../lib/api';
+import { useRepoStatusStore } from './repoStatusStore';
+import { useRepoStore } from './repoStore';
+
+// Keep the left sidebar's status dot (changes color + ahead/behind) in sync with
+// the active repo's freshly-loaded status, so it updates right after any action
+// instead of staying stale until the repo is reopened. Derived from the same
+// GitStatus the panels already show — no extra git round-trip.
+function syncSidebarFromStatus(repoPath: string, status: GitStatus) {
+  const repo = useRepoStore.getState().repos.find(r => r.path === repoPath);
+  if (!repo) return;
+  useRepoStatusStore.getState().setSummary(repo.id, {
+    ahead: status.ahead,
+    behind: status.behind,
+    hasChanges: status.files.length > 0,
+    hasStaged: status.staged.length > 0,
+    hasUnstaged: status.unstaged.length > 0 || status.untracked.length > 0,
+    hasRemote: !!(status.tracking || status.remoteUrl),
+    computedAt: new Date().toISOString(),
+  });
+}
 
 type SelectedFileSource = 'staged' | 'unstaged';
 
@@ -120,6 +140,7 @@ export const useStatusStore = create<StatusState>()((set) => ({
           pendingUnstaged: r.pendingUnstaged,
         };
       });
+      syncSidebarFromStatus(repo, fetched);
     } catch (err: any) {
       set({ error: err.message });
     }
@@ -162,6 +183,7 @@ export const useStatusStore = create<StatusState>()((set) => ({
           pendingUnstaged: r.pendingUnstaged,
         };
       });
+      syncSidebarFromStatus(repo, fetched);
     } catch (err: any) {
       set({ error: err.message, loading: false });
     }

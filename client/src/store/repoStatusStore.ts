@@ -18,6 +18,9 @@ interface RepoStatusState {
   loadCached: (ids: string[]) => Promise<void>;
   refreshSubset: (repos: { id: string; path: string; slowMode?: boolean }[]) => Promise<void>;
   forceRefreshOne: (repo: { id: string; path: string }) => Promise<void>;
+  // Write a freshly-derived summary directly (e.g. from a full status load),
+  // bypassing a separate git round-trip. Clears any slow-mode flag for the repo.
+  setSummary: (id: string, summary: RepoStatusSummary) => void;
 }
 
 export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
@@ -116,6 +119,13 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
       set({ inFlight: after });
     }
   },
+
+  setSummary: (id, summary) =>
+    set(state => {
+      const slow = new Set(state.slowMode);
+      slow.delete(id);
+      return { summaries: { ...state.summaries, [id]: summary }, slowMode: slow };
+    }),
 }));
 
 // --- Refresh queue (visible-row debouncer) ---
