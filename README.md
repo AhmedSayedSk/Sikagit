@@ -19,10 +19,10 @@ Visual commit graph, inline diffs, hunk-level staging, and AI commit messages �
  <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.9" />
 </p>
 
-<!-- TODO: replace with a 10s GIF: commit graph → click a file → stage a hunk → AI commit message. Save as docs/demo.gif -->
-<img src="docs/demo.gif" alt="SikaGit demo — commit graph, hunk staging, and AI commit messages" width="820" />
+<!-- TODO: record a 10s demo GIF (commit graph -> click a file -> stage a hunk -> AI commit message), save it as docs/demo.gif, then uncomment the line below so it renders here. -->
+<!-- <img src="docs/demo.gif" alt="SikaGit demo — commit graph, hunk staging, and AI commit messages" width="820" /> -->
 
-<strong><a href="https://github.com/AhmedSayedSk/Sikagit/stargazers"> Star</a> · <a href="#-quick-start"> Quick Start</a> · <a href="#-screenshots"> Screenshots</a></strong>
+<strong><a href="https://github.com/AhmedSayedSk/Sikagit/stargazers">Star</a> · <a href="#quick-start">Quick Start</a> · <a href="#screenshots">Screenshots</a></strong>
 
 </div>
 
@@ -34,12 +34,12 @@ SikaGit is a self-hosted Git client with a full graphical interface that runs en
 
 | | GitKraken | Sourcetree | GitHub Desktop | **SikaGit** |
 |:--|:--:|:--:|:--:|:--:|
-| Free & open-source | Paid / closed | Free / closed | Free / partial | **Free & OSS** |
-| Self-hosted, runs in Docker | No | No | No | **Yes** |
-| Runs in the browser (any OS incl. WSL) | No | No | No | **Yes** |
-| Visual commit graph | Yes | Yes | No | **Yes** |
-| Hunk-level staging | Yes | Yes | Partial | **Yes** |
-| AI commit messages | Paid add-on | No | No | **Yes (BYO key)** |
+| Free & open-source | ❌ Paid / closed | ⚠️ Free / closed | ⚠️ Free / partial | ✅ **Free & OSS** |
+| Self-hosted, runs in Docker | ❌ | ❌ | ❌ | ✅ |
+| Runs in the browser (any OS incl. WSL) | ❌ | ❌ | ❌ | ✅ |
+| Visual commit graph | ✅ | ✅ | ❌ | ✅ |
+| Hunk-level staging | ✅ | ✅ | ⚠️ | ✅ |
+| AI commit messages | 💲 Paid add-on | ❌ | ❌ | ✅ **BYO key** |
 
 <sub>AI commit messages in SikaGit use your own Google Gemini API key. Competitor rows reflect their standard offerings at time of writing.</sub>
 
@@ -49,7 +49,7 @@ SikaGit is a self-hosted Git client with a full graphical interface that runs en
 - **Visual commit graph** — lane-based rendering with color-coded branches, merge curves, and uncommitted changes shown inline.
 - **Inline diff viewer** — syntax-highlighted diffs with image preview and binary detection so the viewer never freezes on video, audio, or archives.
 - **Hunk-level staging** — stage or discard individual hunks, not just whole files, straight from the diff.
-- Yes **Full staging control** — staged/unstaged panels with folder grouping, bulk stage/discard, and one-click stage-all.
+- **Full staging control** — staged/unstaged panels with folder grouping, bulk stage/discard, and one-click stage-all.
 
 **AI assist** (bring your own Google Gemini key)
 - **AI commit messages** — generate a commit message from your staged diff.
@@ -101,14 +101,16 @@ npm run dev
 
 ## Screenshots
 
-<!-- TODO: capture the main workspace — sidebar with projects/repos + commit graph in the center. Save as docs/screenshot-graph.png -->
-<img src="docs/screenshot-graph.png" alt="SikaGit commit graph and repo sidebar" width="820" />
+_Coming soon._ To add them, drop the image files at the paths below and uncomment each line.
 
-<!-- TODO: capture the diff viewer mid-hunk-stage — a file open with one hunk highlighted and the Stage Hunk action visible. Save as docs/screenshot-diff.png -->
-<img src="docs/screenshot-diff.png" alt="SikaGit inline diff viewer with hunk-level staging" width="820" />
+<!-- TODO: capture the main workspace (sidebar with projects/repos + commit graph in the center), save as docs/screenshot-graph.png, then uncomment: -->
+<!-- <img src="docs/screenshot-graph.png" alt="SikaGit commit graph and repo sidebar" width="820" /> -->
 
-<!-- TODO: capture the AI commit flow — staged changes with a generated commit message in the commit box. Save as docs/screenshot-ai-commit.png -->
-<img src="docs/screenshot-ai-commit.png" alt="SikaGit AI-generated commit message" width="820" />
+<!-- TODO: capture the diff viewer mid-hunk-stage (a file open with one hunk highlighted and the Stage Hunk action visible), save as docs/screenshot-diff.png, then uncomment: -->
+<!-- <img src="docs/screenshot-diff.png" alt="SikaGit inline diff viewer with hunk-level staging" width="820" /> -->
+
+<!-- TODO: capture the AI commit flow (staged changes with a generated commit message in the commit box), save as docs/screenshot-ai-commit.png, then uncomment: -->
+<!-- <img src="docs/screenshot-ai-commit.png" alt="SikaGit AI-generated commit message" width="820" /> -->>
 
 ## Tech stack
 
