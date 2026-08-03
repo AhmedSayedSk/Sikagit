@@ -1,289 +1,164 @@
-<p align="center">
-  <img src="client/public/logo-128.png" alt="SikaGit — Self-Hosted Git GUI Client" width="64" height="64" />
+<div align="center">
+
+<img src="client/public/logo-128.png" alt="SikaGit logo" width="72" height="72" />
+
+# SikaGit
+
+**A free, self-hosted Git GUI that runs in your browser.**
+
+Visual commit graph, inline diffs, hunk-level staging, and AI commit messages — served from Docker, on any OS including WSL. An open-source alternative to GitKraken, Sourcetree, and GitHub Desktop that lives on your own machine.
+
+<p>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Source%20Available-blue?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/AhmedSayedSk/Sikagit/stargazers"><img src="https://img.shields.io/github/stars/AhmedSayedSk/Sikagit?style=flat-square&logo=github" alt="GitHub stars" /></a>
+  <a href="https://github.com/AhmedSayedSk/Sikagit/commits"><img src="https://img.shields.io/github/last-commit/AhmedSayedSk/Sikagit?style=flat-square" alt="Last commit" /></a>
+  <a href="https://github.com/AhmedSayedSk/Sikagit/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs welcome" /></a>
+  <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker ready" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React 19" />
+  <img src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22" />
+  <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.9" />
 </p>
 
-<h1 align="center">SikaGit — Self-Hosted Git GUI for Developers</h1>
+<!-- TODO: replace with a 10s GIF: commit graph → click a file → stage a hunk → AI commit message. Save as docs/demo.gif -->
+<img src="docs/demo.gif" alt="SikaGit demo — commit graph, hunk staging, and AI commit messages" width="820" />
 
-<p align="center">
-  <strong>The open-source, self-hosted Git GUI client you run in Docker.</strong><br/>
-  Visual commit graph, inline diff viewer, hunk-level staging, AI commit messages — all from your browser.<br/>
-  A free alternative to GitKraken, Sourcetree, and GitHub Desktop that runs on your own machine.
-</p>
+<strong><a href="https://github.com/AhmedSayedSk/Sikagit/stargazers">⭐ Star</a> · <a href="#-quick-start">🚀 Quick Start</a> · <a href="#-screenshots">📸 Screenshots</a></strong>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
-  <img src="https://img.shields.io/badge/License-Source%20Available-blue?style=flat-square" alt="License" />
-</p>
+</div>
 
 ---
+
+SikaGit is a self-hosted Git client with a full graphical interface that runs entirely in your browser and installs with a single `docker compose up`. It's for developers who want the clarity of a visual Git tool — commit graph, side-by-side diffs, partial staging — without a licensed desktop app, and who work across multiple repos, machines, or WSL. It exists because the polished Git GUIs are closed-source, paid, or OS-locked; SikaGit is open, free for personal use, and runs wherever Docker does.
 
 ## Why SikaGit?
 
 | | GitKraken | Sourcetree | GitHub Desktop | **SikaGit** |
-|:--|:----------|:-----------|:---------------|:------------|
-| Self-hosted | No | No | No | **Yes** |
-| Runs in Docker | No | No | No | **Yes** |
+|:--|:--:|:--:|:--:|:--:|
+| Free & open-source | Paid / closed | Free / closed | Free / partial | **Free & OSS** |
+| Self-hosted, runs in Docker | No | No | No | **Yes** |
+| Runs in the browser (any OS incl. WSL) | No | No | No | **Yes** |
 | Visual commit graph | Yes | Yes | No | **Yes** |
-| Hunk-level staging | Yes | Yes | No | **Yes** |
-| AI commit messages | No | No | No | **Yes** |
-| Free for personal use | Limited | Yes | Yes | **Yes** |
-| Open source | No | No | Partial | **Yes** |
+| Hunk-level staging | Yes | Yes | Partial | **Yes** |
+| AI commit messages | Paid add-on | No | No | **Yes (BYO key)** |
 
----
+<sub>AI commit messages in SikaGit use your own Google Gemini API key. Competitor rows reflect their standard offerings at time of writing.</sub>
 
-## Getting Started
+## ✨ Features
 
-### Prerequisites
+**Commit & diff**
+- 📊 **Visual commit graph** — lane-based rendering with color-coded branches, merge curves, and uncommitted changes shown inline.
+- 🔍 **Inline diff viewer** — syntax-highlighted diffs with image preview and binary detection so the viewer never freezes on video, audio, or archives.
+- 🧩 **Hunk-level staging** — stage or discard individual hunks, not just whole files, straight from the diff.
+- ✅ **Full staging control** — staged/unstaged panels with folder grouping, bulk stage/discard, and one-click stage-all.
 
-- [Docker](https://docs.docker.com/get-docker/) & [Docker Compose](https://docs.docker.com/compose/install/)
+**AI assist** (bring your own Google Gemini key)
+- 🤖 **AI commit messages** — generate a commit message from your staged diff.
+- 🧠 **Smart commit grouping** — let AI split a messy working tree into coherent, separately-committable groups.
+- 🌿 **Save-for-later** — AI-suggested branch name + message to park work-in-progress on a side branch.
 
-### Development
+**Repos & branches**
+- 🗂️ **Multi-repo projects** — group repositories under projects with a collapsible tree in the sidebar.
+- 🔀 **Branches, tags & merges** — switch/checkout branches, inline branch/tag labels, merge with abort, delete branches.
+- 📡 **Remote operations** — push, pull (merge *or* rebase), fetch, set/test remote URLs, with automatic default-branch detection.
+- ✍️ **Author auto-detection** — identity pulled from local, global, or host git config.
+
+**Runs anywhere**
+- 🐳 **One-command Docker setup** — `docker compose up` and open a browser tab.
+- 🪟 **WSL-friendly** — handles Windows Subsystem for Linux paths transparently; host repos are mounted read-through.
+- 🔑 **Uses your existing keys** — SSH keys from `~/.ssh` and the `gh` credential helper are mounted for remote auth.
+- ⚡ **Live updates** — status stays in sync over Socket.io.
+
+## 🚀 Quick start
+
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) with Docker Compose.
 
 ```bash
-git clone https://github.com/AhmedSayedSk/sikagit.git
-cd sikagit
+git clone https://github.com/AhmedSayedSk/Sikagit.git
+cd Sikagit
 docker compose up --build
 ```
 
-> Open **http://localhost:3200** in your browser.
+Then open **http://localhost:3200** in your browser.
 
-### Production
+<details>
+<summary>Production build</summary>
 
 ```bash
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-### Without Docker
+</details>
+
+<details>
+<summary>Run without Docker (Node 22 + npm)</summary>
 
 ```bash
 npm install
 npm run dev
 ```
 
----
-
-## Features — What Can SikaGit Do?
-
-### Git Operations
-- **Visual Commit Graph** — Lane-based rendering with color-coded branches, merge curves, and uncommitted changes
-- **Inline Diff Viewer** — Syntax-highlighted diffs with hunk-level staging and discarding
-- **File Staging** — Staged/unstaged panels with folder grouping and bulk actions
-- **Commit Management** — Author identity auto-detection from local, global, or host git config
-- **Branch & Tag Support** — Inline branch/tag labels with automatic remote default branch detection
-- **Remote Operations** — Push, pull (merge or rebase), fetch, and remote URL configuration
-
-### Project Management
-- **Multi-Repo Organization** — Group repositories under projects with collapsible tree navigation
-- **AI Commits** — Generate commit messages and smart commit grouping from staged changes
-
-### Developer Experience
-- **Binary Detection** — Prevents diff viewer freeze on video, audio, and archive files
-- **WSL Compatible** — Seamless Windows Subsystem for Linux path handling
-
----
-
-## Ports & Networking
-
-| Service | Port | Description |
-|:--------|:-----|:------------|
-| **Client** | `3200` | Web interface |
-| **API Server** | `3001` | Express + Socket.io |
-
----
-
-## Configuration & Environment Variables
-
-| Variable | Default | Description |
-|:---------|:--------|:------------|
-| `PORT` | `3001` | API server port |
-| `CORS_ORIGINS` | `http://localhost:3200` | Allowed CORS origins |
-| `DATA_DIR` | `/app/server/data` | SQLite database path |
-| `VITE_API_URL` | `http://server:3001` | Backend URL (client in Docker) |
-| `GIT_SSH_COMMAND` | `ssh -o StrictHostKeyChecking=no` | SSH config for remotes |
-| `AZURE_DEVOPS_PAT` | — | Azure DevOps token (optional) |
-
----
-
-## Usage — How to Use SikaGit
-
-<details>
-<summary><strong>Adding a Repository</strong></summary>
-
-1. Click **+** in the sidebar
-2. Browse to your repository folder or paste the path
-3. The repo appears in the sidebar with its git status
-
 </details>
 
+## 📸 Screenshots
+
+<!-- TODO: capture the main workspace — sidebar with projects/repos + commit graph in the center. Save as docs/screenshot-graph.png -->
+<img src="docs/screenshot-graph.png" alt="SikaGit commit graph and repo sidebar" width="820" />
+
+<!-- TODO: capture the diff viewer mid-hunk-stage — a file open with one hunk highlighted and the Stage Hunk action visible. Save as docs/screenshot-diff.png -->
+<img src="docs/screenshot-diff.png" alt="SikaGit inline diff viewer with hunk-level staging" width="820" />
+
+<!-- TODO: capture the AI commit flow — staged changes with a generated commit message in the commit box. Save as docs/screenshot-ai-commit.png -->
+<img src="docs/screenshot-ai-commit.png" alt="SikaGit AI-generated commit message" width="820" />
+
+## 🛠 Tech stack
+
+| Layer | Tech |
+|:--|:--|
+| Frontend | React 19 · Vite 6 · TailwindCSS 4 · Zustand 5 · Radix UI · Lucide / react-icons |
+| Backend | Node.js 22 · Express 4 · simple-git 3 · Socket.io 4 |
+| Database | SQLite (better-sqlite3) |
+| AI | Google Gemini (`gemini-2.5-pro`, bring your own API key) |
+| Infra | Docker · Docker Compose · npm workspaces |
+| Language | TypeScript 5.9 (types shared across client & server) |
+
 <details>
-<summary><strong>Organizing with Projects</strong></summary>
-
-1. Click **New Project** in the sidebar
-2. Name your project and select repositories to include
-3. Repos are grouped under the project with a collapsible view
-
-</details>
-
-<details>
-<summary><strong>Committing Changes</strong></summary>
-
-1. Select a repository from the sidebar
-2. Review changed files in the **Unstaged** panel
-3. Stage files individually or click **Stage All**
-4. Click a file to view its diff — use **Stage Hunk** for partial staging
-5. Write your commit message and click **Commit**
-
-</details>
-
-<details>
-<summary><strong>Remote Operations</strong></summary>
-
-1. Configure the remote URL in repository settings
-2. Use **Push**, **Pull**, or **Fetch** from the toolbar
-3. Pull supports both merge and rebase strategies
-4. SSH keys from `~/.ssh` are automatically mounted into Docker
-
-</details>
-
----
-
-## Tech Stack
-
-```
-Frontend    React 19  ·  Vite 6  ·  TailwindCSS 4  ·  Zustand  ·  Radix UI  ·  Lucide Icons
-Backend     Node.js 22  ·  Express  ·  Simple-git  ·  Socket.io
-Database    SQLite (better-sqlite3)
-Infra       Docker  ·  Docker Compose  ·  npm Workspaces
-Language    TypeScript 5.9 (shared types across client & server)
-```
-
----
-
-## Project Structure
+<summary>Project structure</summary>
 
 ```
 sikagit/
-├── client/                  React frontend (Vite)
+├── client/            React frontend (Vite)
 │   └── src/
-│       ├── components/
-│       │   ├── diff/        Diff viewer & image preview
-│       │   ├── files/       File staging panels
-│       │   ├── graph/       Commit graph rendering
-│       │   ├── layout/      Sidebar, MainContent
-│       │   ├── log/         Commit list & detail
-│       │   ├── operations/  Dialogs (commit, settings)
-│       │   └── ui/          Reusable primitives
-│       ├── lib/             API client, ANSI parser
-│       └── store/           Zustand state stores
-│
-├── server/                  Express API server
+│       ├── components/  graph · diff · files · branches · log · operations · layout · ui
+│       ├── lib/         API client, ANSI parser, file/repo icons
+│       └── store/       Zustand state stores
+├── server/            Express API server
 │   └── src/
-│       ├── routes/          git, repos, projects, browse, ai
-│       └── services/        Git, DB, storage services
-│
-├── shared/                  Shared TypeScript types
-├── data/                    SQLite database (auto-created)
-├── docker-compose.yml       Development
-└── docker-compose.prod.yml  Production
-```
-
----
-
-<details>
-<summary><strong>API Reference</strong></summary>
-
-### Repositories
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| `GET` | `/api/v1/repos` | List all repositories |
-| `POST` | `/api/v1/repos` | Add a repository |
-| `PATCH` | `/api/v1/repos/:id` | Update repo settings |
-| `DELETE` | `/api/v1/repos/:id` | Remove a repository |
-
-### Projects
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| `GET` | `/api/v1/projects` | List all projects |
-| `POST` | `/api/v1/projects` | Create a project |
-| `PATCH` | `/api/v1/projects/:id` | Update project |
-| `DELETE` | `/api/v1/projects/:id` | Delete a project |
-
-### Git
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| `GET` | `/api/v1/git/graph` | Commit graph with lane rendering |
-| `GET` | `/api/v1/git/status` | Detailed file status |
-| `GET` | `/api/v1/git/status-summary` | Batch status (multiple repos) |
-| `GET` | `/api/v1/git/branches` | Branches and tags |
-| `GET` | `/api/v1/git/config` | Git configuration |
-| `POST` | `/api/v1/git/config` | Set config values |
-| `POST` | `/api/v1/git/stage` | Stage files |
-| `POST` | `/api/v1/git/unstage` | Unstage files |
-| `POST` | `/api/v1/git/stage-hunk` | Stage a diff hunk |
-| `POST` | `/api/v1/git/discard-hunk` | Discard a diff hunk |
-| `POST` | `/api/v1/git/commit` | Create a commit |
-| `POST` | `/api/v1/git/push` | Push to remote |
-| `POST` | `/api/v1/git/pull` | Pull (merge or rebase) |
-| `POST` | `/api/v1/git/fetch` | Fetch from remote |
-| `POST` | `/api/v1/git/remote-url` | Set remote URL |
-| `POST` | `/api/v1/git/test-remote` | Test remote connection |
-| `GET` | `/api/v1/git/diff` | File diff |
-| `GET` | `/api/v1/git/file` | File content at commit |
-
-</details>
-
-<details>
-<summary><strong>Scripts</strong></summary>
-
-```bash
-# Development
-npm run dev                  # Client + server with hot reload
-npm run docker:dev           # Docker Compose (foreground)
-npm run docker:dev:detach    # Docker Compose (background)
-
-# Production
-npm run build                # Build all packages
-npm run docker:prod          # Production (foreground)
-npm run docker:prod:detach   # Production (background)
-
-# Utilities
-npm run lint                 # Lint client and server
-npm run docker:down          # Stop containers
-npm run docker:logs          # Tail logs
+│       ├── routes/      git · repos · projects · browse · ai
+│       └── services/    git, graph, db, path, ai services
+├── shared/            Shared TypeScript types
+├── data/              SQLite database (auto-created)
+├── docker-compose.yml       # development
+└── docker-compose.prod.yml  # production
 ```
 
 </details>
 
----
+## 🤝 Contributing
 
-## Contributing
+PRs are welcome. Read the [Contributing Guide](docs/CONTRIBUTING.md) to get a dev environment running and to learn the workflow, then look for issues labelled [`good first issue`](https://github.com/AhmedSayedSk/Sikagit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) to get started.
 
-We welcome contributions! Please read our [Contributing Guide](docs/CONTRIBUTING.md) before submitting a pull request.
-
-- [Report a Bug](https://github.com/AhmedSayedSk/sikagit/issues/new?template=bug_report.md)
-- [Request a Feature](https://github.com/AhmedSayedSk/sikagit/issues/new?template=feature_request.md)
-- [Read the Code of Conduct](docs/CODE_OF_CONDUCT.md)
-- [Security Policy](docs/SECURITY.md)
+- [Report a bug](https://github.com/AhmedSayedSk/Sikagit/issues/new?template=bug_report.md)
+- [Request a feature](https://github.com/AhmedSayedSk/Sikagit/issues/new?template=feature_request.md)
+- [Code of Conduct](docs/CODE_OF_CONDUCT.md) · [Security Policy](docs/SECURITY.md)
 
 ---
 
-## License
+⭐ **If SikaGit saves you time, please star it — it genuinely helps others find it.**
 
-SikaGit is released under the [Sikasio Source Available License](LICENSE).
-Free for personal use. Commercial use requires a license from [Sikasio](https://sikasio.com).
+## 📄 License
 
----
+SikaGit is released under the [Sikasio Source Available License](LICENSE). Free for personal use; commercial use requires a license from [Sikasio](https://sikasio.com).
 
-## Keywords
-
-`git gui` · `git client` · `self-hosted git` · `docker git gui` · `visual commit graph` · `diff viewer` · `git staging tool` · `gitkraken alternative` · `sourcetree alternative` · `github desktop alternative` · `open source git gui` · `react git client` · `node.js git gui` · `wsl git gui` · `ai commit messages` · `git branch visualization` · `hunk staging`
-
-<p align="center">
-  Built by <a href="https://sikasio.com"><strong>Sikasio</strong></a> — A design & development studio from Cairo, Egypt.
-</p>
+<div align="center">
+<sub>Built by <a href="https://sikasio.com"><strong>Sikasio</strong></a> — a design & development studio from Cairo, Egypt.</sub>
+</div>
