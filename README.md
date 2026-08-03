@@ -9,20 +9,20 @@
 Visual commit graph, inline diffs, hunk-level staging, and AI commit messages — served from Docker, on any OS including WSL. An open-source alternative to GitKraken, Sourcetree, and GitHub Desktop that lives on your own machine.
 
 <p>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Source%20Available-blue?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/AhmedSayedSk/Sikagit/stargazers"><img src="https://img.shields.io/github/stars/AhmedSayedSk/Sikagit?style=flat-square&logo=github" alt="GitHub stars" /></a>
-  <a href="https://github.com/AhmedSayedSk/Sikagit/commits"><img src="https://img.shields.io/github/last-commit/AhmedSayedSk/Sikagit?style=flat-square" alt="Last commit" /></a>
-  <a href="https://github.com/AhmedSayedSk/Sikagit/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs welcome" /></a>
-  <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker ready" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React 19" />
-  <img src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22" />
-  <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.9" />
+ <a href="LICENSE"><img src="https://img.shields.io/badge/License-Source%20Available-blue?style=flat-square" alt="License" /></a>
+ <a href="https://github.com/AhmedSayedSk/Sikagit/stargazers"><img src="https://img.shields.io/github/stars/AhmedSayedSk/Sikagit?style=flat-square&logo=github" alt="GitHub stars" /></a>
+ <a href="https://github.com/AhmedSayedSk/Sikagit/commits"><img src="https://img.shields.io/github/last-commit/AhmedSayedSk/Sikagit?style=flat-square" alt="Last commit" /></a>
+ <a href="https://github.com/AhmedSayedSk/Sikagit/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs welcome" /></a>
+ <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker ready" />
+ <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React 19" />
+ <img src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22" />
+ <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.9" />
 </p>
 
 <!-- TODO: replace with a 10s GIF: commit graph → click a file → stage a hunk → AI commit message. Save as docs/demo.gif -->
 <img src="docs/demo.gif" alt="SikaGit demo — commit graph, hunk staging, and AI commit messages" width="820" />
 
-<strong><a href="https://github.com/AhmedSayedSk/Sikagit/stargazers">⭐ Star</a> · <a href="#-quick-start">🚀 Quick Start</a> · <a href="#-screenshots">📸 Screenshots</a></strong>
+<strong><a href="https://github.com/AhmedSayedSk/Sikagit/stargazers"> Star</a> · <a href="#-quick-start"> Quick Start</a> · <a href="#-screenshots"> Screenshots</a></strong>
 
 </div>
 
@@ -43,32 +43,32 @@ SikaGit is a self-hosted Git client with a full graphical interface that runs en
 
 <sub>AI commit messages in SikaGit use your own Google Gemini API key. Competitor rows reflect their standard offerings at time of writing.</sub>
 
-## ✨ Features
+## Features
 
 **Commit & diff**
-- 📊 **Visual commit graph** — lane-based rendering with color-coded branches, merge curves, and uncommitted changes shown inline.
-- 🔍 **Inline diff viewer** — syntax-highlighted diffs with image preview and binary detection so the viewer never freezes on video, audio, or archives.
-- 🧩 **Hunk-level staging** — stage or discard individual hunks, not just whole files, straight from the diff.
-- ✅ **Full staging control** — staged/unstaged panels with folder grouping, bulk stage/discard, and one-click stage-all.
+- **Visual commit graph** — lane-based rendering with color-coded branches, merge curves, and uncommitted changes shown inline.
+- **Inline diff viewer** — syntax-highlighted diffs with image preview and binary detection so the viewer never freezes on video, audio, or archives.
+- **Hunk-level staging** — stage or discard individual hunks, not just whole files, straight from the diff.
+- Yes **Full staging control** — staged/unstaged panels with folder grouping, bulk stage/discard, and one-click stage-all.
 
 **AI assist** (bring your own Google Gemini key)
-- 🤖 **AI commit messages** — generate a commit message from your staged diff.
-- 🧠 **Smart commit grouping** — let AI split a messy working tree into coherent, separately-committable groups.
-- 🌿 **Save-for-later** — AI-suggested branch name + message to park work-in-progress on a side branch.
+- **AI commit messages** — generate a commit message from your staged diff.
+- **Smart commit grouping** — let AI split a messy working tree into coherent, separately-committable groups.
+- **Save-for-later** — AI-suggested branch name + message to park work-in-progress on a side branch.
 
 **Repos & branches**
-- 🗂️ **Multi-repo projects** — group repositories under projects with a collapsible tree in the sidebar.
-- 🔀 **Branches, tags & merges** — switch/checkout branches, inline branch/tag labels, merge with abort, delete branches.
-- 📡 **Remote operations** — push, pull (merge *or* rebase), fetch, set/test remote URLs, with automatic default-branch detection.
-- ✍️ **Author auto-detection** — identity pulled from local, global, or host git config.
+- **Multi-repo projects** — group repositories under projects with a collapsible tree in the sidebar.
+- **Branches, tags & merges** — switch/checkout branches, inline branch/tag labels, merge with abort, delete branches.
+- **Remote operations** — push, pull (merge *or* rebase), fetch, set/test remote URLs, with automatic default-branch detection.
+- **Author auto-detection** — identity pulled from local, global, or host git config.
 
 **Runs anywhere**
-- 🐳 **One-command Docker setup** — `docker compose up` and open a browser tab.
-- 🪟 **WSL-friendly** — handles Windows Subsystem for Linux paths transparently; host repos are mounted read-through.
-- 🔑 **Uses your existing keys** — SSH keys from `~/.ssh` and the `gh` credential helper are mounted for remote auth.
-- ⚡ **Live updates** — status stays in sync over Socket.io.
+- **One-command Docker setup** — `docker compose up` and open a browser tab.
+- **WSL-friendly** — handles Windows Subsystem for Linux paths transparently; host repos are mounted read-through.
+- **Uses your existing keys** — SSH keys from `~/.ssh` and the `gh` credential helper are mounted for remote auth.
+- **Live updates** — status stays in sync over Socket.io.
 
-## 🚀 Quick start
+## Quick start
 
 **Prerequisites:** [Docker](https://docs.docker.com/get-docker/) with Docker Compose.
 
@@ -99,7 +99,7 @@ npm run dev
 
 </details>
 
-## 📸 Screenshots
+## Screenshots
 
 <!-- TODO: capture the main workspace — sidebar with projects/repos + commit graph in the center. Save as docs/screenshot-graph.png -->
 <img src="docs/screenshot-graph.png" alt="SikaGit commit graph and repo sidebar" width="820" />
@@ -110,7 +110,7 @@ npm run dev
 <!-- TODO: capture the AI commit flow — staged changes with a generated commit message in the commit box. Save as docs/screenshot-ai-commit.png -->
 <img src="docs/screenshot-ai-commit.png" alt="SikaGit AI-generated commit message" width="820" />
 
-## 🛠 Tech stack
+## Tech stack
 
 | Layer | Tech |
 |:--|:--|
@@ -143,7 +143,7 @@ sikagit/
 
 </details>
 
-## 🤝 Contributing
+## Contributing
 
 PRs are welcome. Read the [Contributing Guide](docs/CONTRIBUTING.md) to get a dev environment running and to learn the workflow, then look for issues labelled [`good first issue`](https://github.com/AhmedSayedSk/Sikagit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) to get started.
 
@@ -153,9 +153,9 @@ PRs are welcome. Read the [Contributing Guide](docs/CONTRIBUTING.md) to get a de
 
 ---
 
-⭐ **If SikaGit saves you time, please star it — it genuinely helps others find it.**
+ **If SikaGit saves you time, please star it — it genuinely helps others find it.**
 
-## 📄 License
+## License
 
 SikaGit is released under the [Sikasio Source Available License](LICENSE). Free for personal use; commercial use requires a license from [Sikasio](https://sikasio.com).
 
