@@ -11,7 +11,7 @@ import { ProjectsReorderDialog } from '../operations/ProjectsReorderDialog';
 import { useConfirmStore } from '../../store/confirmStore';
 import { useRepoStatusStore, enqueueRepoRefresh, markRepoVisible, markRepoHidden, refreshAllVisible } from '../../store/repoStatusStore';
 import { useToastStore } from '../../store/toastStore';
-import { cn } from '../../lib/utils';
+import { cn, formatDateCompact } from '../../lib/utils';
 import type { RepoBookmark, Project } from '@sikagit/shared';
 
 // Pure decision for the "uncommitted changes" dot color.
@@ -141,6 +141,45 @@ function ProjectStatusDot({ project, repos, hidden }: { project: Project; repos:
           <CircleDot size={10} strokeWidth={2.5} />
         </span>
       )}
+    </span>
+  );
+}
+
+// "Last worked on" chip — compact relative time of a repo's most recent commit.
+// Renders nothing until the status cache has a date (and for repos with no commits).
+function RepoActivityChip({ repoId }: { repoId: string }) {
+  const lastCommitAt = useRepoStatusStore(s => s.summaries[repoId]?.lastCommitAt);
+  if (!lastCommitAt) return null;
+  return (
+    <span
+      className="flex-shrink-0 text-text-muted tabular-nums whitespace-nowrap"
+      style={{ fontSize: 10 }}
+      title={`Last commit — ${new Date(lastCommitAt).toLocaleString()}`}
+    >
+      {formatDateCompact(lastCommitAt)}
+    </span>
+  );
+}
+
+// Project-level activity = the newest last-commit across the project's repos.
+// ISO strings compare lexicographically in chronological order, so string max works.
+function ProjectActivityChip({ project, repos, hidden }: { project: Project; repos: RepoBookmark[]; hidden?: boolean }) {
+  const summaries = useRepoStatusStore(s => s.summaries);
+  if (hidden) return null;
+  let latest: string | null = null;
+  for (const id of project.repoIds) {
+    if (!repos.some(r => r.id === id)) continue;
+    const t = summaries[id]?.lastCommitAt;
+    if (t && (latest === null || t > latest)) latest = t;
+  }
+  if (!latest) return null;
+  return (
+    <span
+      className="flex-shrink-0 text-text-muted tabular-nums whitespace-nowrap"
+      style={{ fontSize: 10 }}
+      title={`Most recent commit across this project — ${new Date(latest).toLocaleString()}`}
+    >
+      {formatDateCompact(latest)}
     </span>
   );
 }
@@ -412,6 +451,7 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
                   <div className="flex-1 min-w-0">
                     <div className="truncate font-medium demo-blur" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
                   </div>
+                  <RepoActivityChip repoId={repo.id} />
                   <RepoStatusDot repoId={repo.id} slowMode={repo.slowMode} />
                 </div>
               </div>
@@ -475,6 +515,7 @@ function ProjectSection({ project, repos, activeRepoId, expanded, onToggle, onSe
             <Trash2 size={10} />
           </button>
         </div>
+        <ProjectActivityChip project={project} repos={repos} hidden={expanded} />
         <ProjectStatusDot project={project} repos={repos} hidden={expanded} />
       </div>
 
@@ -550,6 +591,7 @@ function RepoItem({ repo, isActive, onSelect }: {
       <div className="flex-1 min-w-0">
         <div className="truncate font-medium demo-blur" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
       </div>
+      <RepoActivityChip repoId={repo.id} />
       <RepoStatusDot repoId={repo.id} slowMode={repo.slowMode} />
     </div>
   );

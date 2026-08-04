@@ -50,7 +50,8 @@ db.exec(`
     has_staged INTEGER NOT NULL DEFAULT 0,
     has_unstaged INTEGER NOT NULL DEFAULT 0,
     has_remote INTEGER NOT NULL DEFAULT 0,
-    computed_at TEXT NOT NULL
+    computed_at TEXT NOT NULL,
+    last_commit_at TEXT
   );
 `);
 
@@ -74,6 +75,12 @@ if (!statusCacheColNames.has('has_staged')) {
 }
 if (!statusCacheColNames.has('has_unstaged')) {
   db.exec('ALTER TABLE repo_status_cache ADD COLUMN has_unstaged INTEGER NOT NULL DEFAULT 0');
+}
+// --- Additive migration: repo_status_cache.last_commit_at ---
+// Powers the "last worked on" chip. NULL until the next status refresh fills it
+// (and stays NULL for repos with no commits / unborn HEAD).
+if (!statusCacheColNames.has('last_commit_at')) {
+  db.exec('ALTER TABLE repo_status_cache ADD COLUMN last_commit_at TEXT');
 }
 
 // Migrate: add position column to project_repos if missing
@@ -282,11 +289,12 @@ export interface RepoStatusCacheEntry {
   hasUnstaged: boolean;
   hasRemote: boolean;
   computedAt: string;
+  lastCommitAt: string | null;
 }
 
 const stmtUpsertRepoStatus = db.prepare(
-  `INSERT INTO repo_status_cache (repo_id, ahead, behind, has_changes, has_staged, has_unstaged, has_remote, computed_at)
-   VALUES (@repoId, @ahead, @behind, @hasChanges, @hasStaged, @hasUnstaged, @hasRemote, @computedAt)
+  `INSERT INTO repo_status_cache (repo_id, ahead, behind, has_changes, has_staged, has_unstaged, has_remote, computed_at, last_commit_at)
+   VALUES (@repoId, @ahead, @behind, @hasChanges, @hasStaged, @hasUnstaged, @hasRemote, @computedAt, @lastCommitAt)
    ON CONFLICT(repo_id) DO UPDATE SET
      ahead = excluded.ahead,
      behind = excluded.behind,
@@ -294,14 +302,15 @@ const stmtUpsertRepoStatus = db.prepare(
      has_staged = excluded.has_staged,
      has_unstaged = excluded.has_unstaged,
      has_remote = excluded.has_remote,
-     computed_at = excluded.computed_at`
+     computed_at = excluded.computed_at,
+     last_commit_at = excluded.last_commit_at`
 );
 
 export function getRepoStatusSummaries(ids: string[]): Record<string, RepoStatusCacheEntry> {
   if (ids.length === 0) return {};
   const placeholders = ids.map(() => '?').join(',');
   const rows = db
-    .prepare(`SELECT repo_id, ahead, behind, has_changes, has_staged, has_unstaged, has_remote, computed_at FROM repo_status_cache WHERE repo_id IN (${placeholders})`)
+    .prepare(`SELECT repo_id, ahead, behind, has_changes, has_staged, has_unstaged, has_remote, computed_at, last_commit_at FROM repo_status_cache WHERE repo_id IN (${placeholders})`)
     .all(...ids) as any[];
   const out: Record<string, RepoStatusCacheEntry> = {};
   for (const r of rows) {
@@ -313,6 +322,7 @@ export function getRepoStatusSummaries(ids: string[]): Record<string, RepoStatus
       hasUnstaged: !!r.has_unstaged,
       hasRemote: !!r.has_remote,
       computedAt: r.computed_at,
+      lastCommitAt: r.last_commit_at ?? null,
     };
   }
   return out;
@@ -320,7 +330,7 @@ export function getRepoStatusSummaries(ids: string[]): Record<string, RepoStatus
 
 export function upsertRepoStatusSummary(
   repoId: string,
-  summary: { ahead: number; behind: number; hasChanges: boolean; hasStaged: boolean; hasUnstaged: boolean; hasRemote: boolean }
+  summary: { ahead: number; behind: number; hasChanges: boolean; hasStaged: boolean; hasUnstaged: boolean; hasRemote: boolean; lastCommitAt?: string | null }
 ): void {
   stmtUpsertRepoStatus.run({
     repoId,
@@ -331,6 +341,7 @@ export function upsertRepoStatusSummary(
     hasUnstaged: summary.hasUnstaged ? 1 : 0,
     hasRemote: summary.hasRemote ? 1 : 0,
     computedAt: new Date().toISOString(),
+    lastCommitAt: summary.lastCommitAt ?? null,
   });
 }
 

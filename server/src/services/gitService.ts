@@ -205,6 +205,7 @@ export async function getStatusSummary(repoPath: string): Promise<{
   hasStaged: boolean;
   hasUnstaged: boolean;
   hasRemote: boolean;
+  lastCommitAt: string | null;
 }> {
   return withTimeout(async () => {
     const git = getGit(repoPath);
@@ -215,6 +216,16 @@ export async function getStatusSummary(repoPath: string): Promise<{
       hasRemote = url.length > 0;
     } catch {
       // No remote.origin.url configured
+    }
+    // Last commit date — the cheapest possible git call (committer date of HEAD,
+    // as unix seconds). Fails on an unborn HEAD (freshly-init'd repo, no commits),
+    // which we treat as "no activity yet" → null.
+    let lastCommitAt: string | null = null;
+    try {
+      const ct = (await git.raw(['log', '-1', '--format=%ct'])).trim();
+      if (ct) lastCommitAt = new Date(parseInt(ct, 10) * 1000).toISOString();
+    } catch {
+      // Unborn HEAD / no commits
     }
     // Mirror getStatus()'s staged/unstaged semantics so the sidebar dot agrees
     // with the staging panel. A file in the index (index letter not space/?/!)
@@ -231,6 +242,7 @@ export async function getStatusSummary(repoPath: string): Promise<{
       hasStaged,
       hasUnstaged,
       hasRemote,
+      lastCommitAt,
     };
   }, STATUS_TIMEOUT_MS, 'getStatusSummary');
 }

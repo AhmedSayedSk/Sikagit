@@ -9,6 +9,7 @@ interface RepoStatusSummary {
   hasUnstaged: boolean;
   hasRemote: boolean;
   computedAt?: string;
+  lastCommitAt?: string | null;   // ISO date of the most recent commit; null if none
 }
 
 interface RepoStatusState {
@@ -72,6 +73,7 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
             hasUnstaged: entry.hasUnstaged ?? false,
             hasRemote: entry.hasRemote ?? true,
             computedAt: entry.computedAt,
+            lastCommitAt: entry.lastCommitAt ?? null,
           };
         }
       }
@@ -108,6 +110,7 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
           hasUnstaged: data.hasUnstaged ?? false,
           hasRemote: data.hasRemote ?? true,
           computedAt: data.computedAt,
+          lastCommitAt: data.lastCommitAt ?? null,
         };
       }
       set({ summaries, slowMode: slow });

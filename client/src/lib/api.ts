@@ -55,7 +55,7 @@ export const api = {
   getStatus: (repo: string) => request<import('@sikagit/shared').GitStatus>(`/git/status?repo=${encodeURIComponent(repo)}`),
   // Cached: instant DB read, no git ops. Use on boot + as a baseline.
   getStatusSummaryCached: (ids: string[]) =>
-    request<Record<string, { ahead: number; behind: number; hasChanges: boolean; hasStaged: boolean; hasUnstaged: boolean; hasRemote: boolean; computedAt: string }>>(
+    request<Record<string, { ahead: number; behind: number; hasChanges: boolean; hasStaged: boolean; hasUnstaged: boolean; hasRemote: boolean; computedAt: string; lastCommitAt: string | null }>>(
       `/git/status-summary/cached?ids=${encodeURIComponent(ids.join(','))}`
     ),
   // Refresh: compute fresh summaries for a subset and write-through to the cache.
@@ -68,6 +68,7 @@ export const api = {
       hasUnstaged?: boolean;
       hasRemote?: boolean;
       computedAt?: string;
+      lastCommitAt?: string | null;
       skipped?: boolean;
       reason?: string;
       slowMode?: boolean;
@@ -80,6 +81,7 @@ export const api = {
     request<{
       ahead?: number; behind?: number; hasChanges?: boolean; hasStaged?: boolean; hasUnstaged?: boolean; hasRemote?: boolean;
       computedAt?: string;
+      lastCommitAt?: string | null;
       skipped?: boolean;
       reason?: string;
       slowMode?: boolean;
