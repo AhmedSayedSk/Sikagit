@@ -601,6 +601,8 @@ export function Sidebar() {
   const { repos, activeRepoId, setActiveRepo } = useRepoStore();
   const { projects, fetchProjects, deleteProject, updateProject } = useProjectStore();
   const loadCached = useRepoStatusStore(s => s.loadCached);
+  const refreshSubset = useRepoStatusStore(s => s.refreshSubset);
+  const didInitialFullRefresh = useRef(false);
   const fontSize = useUIStore(s => s.fontSize);
   const demoMode = useUIStore(s => s.demoMode);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -632,6 +634,16 @@ export function Sidebar() {
     if (repos.length === 0) return;
     loadCached(repos.map(r => r.id));
   }, [repos, loadCached]);
+
+  // 1b) Once per page load, refresh EVERY repo (not just the visible ones) so all
+  //     repo/project "last worked on" times are set right after a reload. Projects
+  //     derive their time from their repos, so this updates them too. Runs a single
+  //     batched sweep (server caps concurrency); slow/timed-out repos self-skip.
+  useEffect(() => {
+    if (repos.length === 0 || didInitialFullRefresh.current) return;
+    didInitialFullRefresh.current = true;
+    refreshSubset(repos.map(r => ({ id: r.id, path: r.path, slowMode: r.slowMode })));
+  }, [repos, refreshSubset]);
 
   // 2) Refresh only the repos currently visible in the viewport on a 60s tick.
   //    Pauses while the tab is hidden. Individual rows enqueue themselves when
@@ -753,7 +765,19 @@ export function Sidebar() {
                 repos={repos}
                 activeRepoId={activeRepoId}
                 expanded={expandedProjectId === project.id}
-                onToggle={() => setExpandedProjectId(expandedProjectId === project.id ? null : project.id)}
+                onToggle={() => {
+                  const willExpand = expandedProjectId !== project.id;
+                  setExpandedProjectId(willExpand ? project.id : null);
+                  // Opening a project refreshes its repos' times (force a fresh sweep).
+                  if (willExpand) {
+                    refreshSubset(
+                      project.repoIds
+                        .map(id => repos.find(r => r.id === id))
+                        .filter((r): r is RepoBookmark => !!r)
+                        .map(r => ({ id: r.id, path: r.path, slowMode: r.slowMode }))
+                    );
+                  }
+                }}
                 onSelectRepo={(id) => { setActiveRepo(id); setExpandedProjectId(project.id); }}
                 onEditProject={() => setProjectDialog({ open: true, project })}
                 onDeleteProject={async () => {
