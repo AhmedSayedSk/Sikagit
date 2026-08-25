@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { DiffWhitespaceMode } from '@sikagit/shared';
 
 type Panel = 'log' | 'files' | 'branches';
 type Theme = 'dark' | 'light';
@@ -11,6 +12,8 @@ interface UIState {
   fontSize: number;
   diffFontSize: number;
   diffLineHeight: number;
+  /** Whitespace noise filter applied to every diff view. */
+  diffWhitespace: DiffWhitespaceMode;
   sidebarWidth: number;
   commitListWidth: number;
   bottomPanelHeight: number;
@@ -34,6 +37,7 @@ interface UIState {
   setFontSize: (size: number) => void;
   setDiffFontSize: (size: number) => void;
   setDiffLineHeight: (height: number) => void;
+  setDiffWhitespace: (mode: DiffWhitespaceMode) => void;
   setSidebarWidth: (width: number) => void;
   setCommitListWidth: (width: number) => void;
   setBottomPanelHeight: (height: number) => void;
@@ -73,6 +77,9 @@ export const useUIStore = create<UIState>()(
       fontSize: 14,
       diffFontSize: 12,
       diffLineHeight: 3,
+      // Defaults to 'eol': line-ending churn is never worth reading, and left
+      // unfiltered it reports every line of a file as changed.
+      diffWhitespace: 'eol',
       sidebarWidth: 240,
       commitListWidth: 500,
       bottomPanelHeight: 320,
@@ -97,6 +104,7 @@ export const useUIStore = create<UIState>()(
       setFontSize: (size: number) => set({ fontSize: clamp(size, 10, 20) }),
       setDiffFontSize: (size: number) => set({ diffFontSize: clamp(size, 8, 20) }),
       setDiffLineHeight: (height: number) => set({ diffLineHeight: clamp(height, 0, 10) }),
+      setDiffWhitespace: (mode: DiffWhitespaceMode) => set({ diffWhitespace: mode }),
       setSidebarWidth: (width: number) => set({
         sidebarWidth: clamp(width, SIDEBAR_MIN, SIDEBAR_MAX),
       }),

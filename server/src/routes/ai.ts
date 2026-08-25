@@ -23,7 +23,9 @@ router.post('/suggest', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  const diff = await withRepoLock(repoPath, () => gitService.getStagedDiff(repoPath));
+  // 'eol': a CRLF -> LF rewrite makes every line of a file look changed, which
+  // would otherwise flood the prompt with noise and skew the suggestion.
+  const diff = await withRepoLock(repoPath, () => gitService.getStagedDiff(repoPath, undefined, 'eol'));
   if (!diff.trim()) {
     res.status(400).json({ success: false, error: 'No staged changes to analyze' });
     return;
@@ -47,7 +49,7 @@ router.post('/suggest-save-for-later', asyncHandler(async (req: Request, res: Re
     return;
   }
 
-  const diff = await withRepoLock(repoPath, () => gitService.getDiff(repoPath));
+  const diff = await withRepoLock(repoPath, () => gitService.getDiff(repoPath, undefined, undefined, 'eol'));
   const result = await aiService.suggestSaveForLater(apiKey, model || 'gemini-2.5-pro', files, diff || '');
   res.json({ success: true, data: result });
 }));
@@ -63,7 +65,7 @@ router.post('/smart-commit/preview', asyncHandler(async (req: Request, res: Resp
   }
 
   const [diff, status] = await withRepoLock(repoPath, async () => {
-    const d = await gitService.getStagedDiff(repoPath);
+    const d = await gitService.getStagedDiff(repoPath, undefined, 'eol');
     const s = await gitService.getStatus(repoPath);
     return [d, s] as const;
   });

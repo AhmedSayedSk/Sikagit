@@ -10,6 +10,12 @@ interface DiffViewProps {
   /** If provided, enables Stage hunk / Discard hunk buttons */
   onStageHunk?: (hunkIndex: number, filePath: string) => void;
   onDiscardHunk?: (hunkIndex: number, filePath: string) => void;
+  /**
+   * When set, the hunk buttons render disabled with this text as the tooltip.
+   * Used while a whitespace filter is active: the visible diff no longer matches
+   * the file on disk byte-for-byte, so `git apply` would reject the patch.
+   */
+  hunkActionsDisabledReason?: string;
 }
 
 interface DiffLine {
@@ -173,7 +179,7 @@ const markerStyles: Record<DiffLine['type'], string> = {
   meta: '',
 };
 
-function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onStageHunk, onDiscardHunk }: {
+function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onStageHunk, onDiscardHunk, hunkActionsDisabledReason }: {
   hunk: DiffHunk;
   hunkIdx: number;
   filePath: string;
@@ -181,6 +187,7 @@ function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onSta
   diffLineHeight: number;
   onStageHunk?: (hunkIndex: number, filePath: string) => void;
   onDiscardHunk?: (hunkIndex: number, filePath: string) => void;
+  hunkActionsDisabledReason?: string;
 }) {
   const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -211,11 +218,14 @@ function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onSta
           Hunk {hunkIdx + 1} : Lines {hunk.startNew}-{hunk.endNew}
         </span>
         {(onStageHunk || onDiscardHunk) && (
-          <div className="flex gap-2">
+          // The wrapping span carries the tooltip: a disabled button swallows
+          // its own hover events, so `title` on it never fires.
+          <span className="flex gap-2" title={hunkActionsDisabledReason}>
             {onStageHunk && (
               <button
                 onClick={() => onStageHunk(hunkIdx, filePath)}
-                className="px-2 py-0.5 text-[0.625rem] font-medium rounded border border-success/25 bg-success/10 text-success/80 hover:bg-success/20 hover:text-success hover:border-success/40 transition-colors"
+                disabled={!!hunkActionsDisabledReason}
+                className="px-2 py-0.5 text-[0.625rem] font-medium rounded border border-success/25 bg-success/10 text-success/80 hover:bg-success/20 hover:text-success hover:border-success/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-success/10 disabled:hover:text-success/80 disabled:hover:border-success/25"
               >
                 Stage hunk
               </button>
@@ -223,12 +233,13 @@ function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onSta
             {onDiscardHunk && (
               <button
                 onClick={() => onDiscardHunk(hunkIdx, filePath)}
-                className="px-2 py-0.5 text-[0.625rem] font-medium rounded border border-danger/25 bg-danger/10 text-danger/80 hover:bg-danger/20 hover:text-danger hover:border-danger/40 transition-colors"
+                disabled={!!hunkActionsDisabledReason}
+                className="px-2 py-0.5 text-[0.625rem] font-medium rounded border border-danger/25 bg-danger/10 text-danger/80 hover:bg-danger/20 hover:text-danger hover:border-danger/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-danger/10 disabled:hover:text-danger/80 disabled:hover:border-danger/25"
               >
                 Discard hunk
               </button>
             )}
-          </div>
+          </span>
         )}
       </div>
 
@@ -267,13 +278,14 @@ function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onSta
   );
 }
 
-function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, onDiscardHunk }: {
+function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, onDiscardHunk, hunkActionsDisabledReason }: {
   file: DiffFile;
   hunkStartIndex: number;
   repoPath?: string;
   commit?: string;
   onStageHunk?: (hunkIndex: number, filePath: string) => void;
   onDiscardHunk?: (hunkIndex: number, filePath: string) => void;
+  hunkActionsDisabledReason?: string;
 }) {
   const [expanded, setExpanded] = useState(true);
   const diffFontSize = useUIStore(s => s.diffFontSize);
@@ -350,6 +362,7 @@ function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, 
           diffLineHeight={diffLineHeight}
           onStageHunk={onStageHunk}
           onDiscardHunk={onDiscardHunk}
+          hunkActionsDisabledReason={hunkActionsDisabledReason}
         />
       ))}
     </div>
@@ -359,13 +372,14 @@ function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, 
 const INITIAL_FILES = 5;
 const LOAD_MORE_FILES = 5;
 
-function LazyDiffFile({ file, hunkStartIndex, repoPath, commit, onStageHunk, onDiscardHunk }: {
+function LazyDiffFile({ file, hunkStartIndex, repoPath, commit, onStageHunk, onDiscardHunk, hunkActionsDisabledReason }: {
   file: DiffFile;
   hunkStartIndex: number;
   repoPath?: string;
   commit?: string;
   onStageHunk?: (hunkIndex: number, filePath: string) => void;
   onDiscardHunk?: (hunkIndex: number, filePath: string) => void;
+  hunkActionsDisabledReason?: string;
 }) {
   const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -413,6 +427,7 @@ function LazyDiffFile({ file, hunkStartIndex, repoPath, commit, onStageHunk, onD
       commit={commit}
       onStageHunk={onStageHunk}
       onDiscardHunk={onDiscardHunk}
+      hunkActionsDisabledReason={hunkActionsDisabledReason}
     />
   );
 }
@@ -438,7 +453,7 @@ function getOversizeMessage(diff: string): string | null {
   return null;
 }
 
-export function DiffView({ diff, repoPath, commit, onStageHunk, onDiscardHunk }: DiffViewProps) {
+export function DiffView({ diff, repoPath, commit, onStageHunk, onDiscardHunk, hunkActionsDisabledReason }: DiffViewProps) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_FILES);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -510,6 +525,7 @@ export function DiffView({ diff, repoPath, commit, onStageHunk, onDiscardHunk }:
           commit={commit}
           onStageHunk={onStageHunk}
           onDiscardHunk={onDiscardHunk}
+          hunkActionsDisabledReason={hunkActionsDisabledReason}
         />
       ))}
       {remaining > 0 && (

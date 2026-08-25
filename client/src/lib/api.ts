@@ -1,4 +1,4 @@
-import type { ApiResponse } from '@sikagit/shared';
+import type { ApiResponse, DiffPayload, DiffWhitespaceMode } from '@sikagit/shared';
 
 const BASE_URL = '/api/v1';
 
@@ -115,16 +115,20 @@ export const api = {
   getTags: (repo: string) => request<import('@sikagit/shared').GitTag[]>(`/git/tags?repo=${encodeURIComponent(repo)}`),
   getCommitFiles: (repo: string, commit: string) =>
     request<{ path: string; status: string }[]>(`/git/commit-files?repo=${encodeURIComponent(repo)}&commit=${encodeURIComponent(commit)}`),
-  getDiff: (repo: string, commit?: string, file?: string) => {
+  // `ws` is the whitespace filter ('none' | 'eol' | 'all'). 'eol' hides pure
+  // CRLF<->LF churn, which otherwise renders as a whole-file rewrite.
+  getDiff: (repo: string, commit?: string, file?: string, ws: DiffWhitespaceMode = 'none') => {
     const params = new URLSearchParams({ repo });
     if (commit) params.set('commit', commit);
     if (file) params.set('file', file);
-    return request<string>(`/git/diff?${params}`);
+    if (ws !== 'none') params.set('ws', ws);
+    return request<DiffPayload>(`/git/diff?${params}`);
   },
-  getStagedDiff: (repo: string, file?: string) => {
+  getStagedDiff: (repo: string, file?: string, ws: DiffWhitespaceMode = 'none') => {
     const params = new URLSearchParams({ repo });
     if (file) params.set('file', file);
-    return request<string>(`/git/diff/staged?${params}`);
+    if (ws !== 'none') params.set('ws', ws);
+    return request<DiffPayload>(`/git/diff/staged?${params}`);
   },
 
   // Hunk operations

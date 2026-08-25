@@ -8,6 +8,9 @@ import { useConfirmStore } from '../../store/confirmStore';
 import { api } from '../../lib/api';
 import { truncateHash } from '../../lib/utils';
 import { DiffView } from '../diff/DiffView';
+import { DiffWhitespaceToggle, WhitespaceSuppressionNotice } from '../diff/DiffWhitespaceControls';
+import { useUIStore } from '../../store/uiStore';
+import type { DiffWhitespaceSuppression } from '@sikagit/shared';
 
 interface CommitDetailProps {
   repoPath: string;
@@ -21,6 +24,9 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
   const isUncommitted = selectedCommit === '__uncommitted__';
   const commit = isUncommitted ? null : commits.find(c => c.hash === selectedCommit);
   const [diff, setDiff] = useState<string>('');
+  const [suppressed, setSuppressed] = useState<DiffWhitespaceSuppression[]>([]);
+  const [diffLoading, setDiffLoading] = useState(true);
+  const whitespace = useUIStore(s => s.diffWhitespace);
   const [copied, setCopied] = useState(false);
   const [uncommitting, setUncommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -34,21 +40,47 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
 
   // Fetch diff for uncommitted changes (staged + unstaged combined)
   useEffect(() => {
+    const empty = { diff: '', suppressed: [] as DiffWhitespaceSuppression[] };
     if (isUncommitted) {
+      setDiffLoading(true);
       Promise.all([
-        api.getStagedDiff(repoPath).catch(() => ''),
-        api.getDiff(repoPath).catch(() => ''),
+        api.getStagedDiff(repoPath, undefined, whitespace).catch(() => empty),
+        api.getDiff(repoPath, undefined, undefined, whitespace).catch(() => empty),
       ]).then(([staged, unstaged]) => {
-        setDiff([staged, unstaged].filter(Boolean).join('\n'));
-      });
+        setDiff([staged.diff, unstaged.diff].filter(Boolean).join('\n'));
+        // Same file can appear in both halves; keep one entry per path.
+        const byPath = new Map<string, DiffWhitespaceSuppression>();
+        for (const f of [...staged.suppressed, ...unstaged.suppressed]) {
+          const prev = byPath.get(f.path);
+          byPath.set(f.path, prev
+            ? {
+                path: f.path,
+                additions: prev.additions + f.additions,
+                deletions: prev.deletions + f.deletions,
+                whollySuppressed: prev.whollySuppressed && f.whollySuppressed,
+              }
+            : f);
+        }
+        setSuppressed([...byPath.values()]);
+      }).finally(() => setDiffLoading(false));
       setScrollY(0);
       return;
     }
     if (commit) {
-      api.getDiff(repoPath, commit.hash, selectedCommitFile || undefined).then(setDiff).catch(() => setDiff(''));
+      setDiffLoading(true);
+      api.getDiff(repoPath, commit.hash, selectedCommitFile || undefined, whitespace)
+        .then(payload => {
+          setDiff(payload.diff);
+          setSuppressed(payload.suppressed);
+        })
+        .catch(() => {
+          setDiff('');
+          setSuppressed([]);
+        })
+        .finally(() => setDiffLoading(false));
       setScrollY(0);
     }
-  }, [isUncommitted, commit?.hash, repoPath, selectedCommitFile]);
+  }, [isUncommitted, commit?.hash, repoPath, selectedCommitFile, whitespace]);
 
   // Measure natural height of description+metadata via inner wrapper.
   // Stays at auto height regardless of outer's controlled height.
@@ -88,6 +120,14 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
 
   if (!commit && !isUncommitted) return null;
 
+  // An empty diff under an active filter means the changes were all whitespace —
+  // saying "no changes" there would be wrong.
+  const emptyDiffMessage = suppressed.length > 0
+    ? whitespace === 'eol'
+      ? 'Only line endings changed (CRLF ↔ LF) — no content differences'
+      : 'Only whitespace changed — no content differences'
+    : 'No changes to display';
+
   // Render simplified view for uncommitted changes
   if (isUncommitted) {
     const stagedCount = status?.staged.length || 0;
@@ -103,20 +143,24 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
                 {stagedCount} staged, {unstagedCount} unstaged
               </span>
             </div>
-            <button
-              onClick={() => selectCommit(null)}
-              className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary flex-shrink-0"
-            >
-              <X size={14} />
-            </button>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <DiffWhitespaceToggle />
+              <button
+                onClick={() => selectCommit(null)}
+                className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary"
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
         </div>
+        <WhitespaceSuppressionNotice suppressed={suppressed} mode={whitespace} />
         <div className="flex-1 overflow-hidden">
           {diff ? (
             <DiffView diff={diff} repoPath={repoPath} />
           ) : (
             <div className="flex items-center justify-center h-full text-text-muted text-sm">
-              Loading diff...
+              {diffLoading ? 'Loading diff...' : emptyDiffMessage}
             </div>
           )}
         </div>
@@ -219,12 +263,15 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
             <GitCommitHorizontal size={13} className="text-accent flex-shrink-0" />
             <p className="text-xs font-semibold text-text-primary leading-snug truncate">{commit.message}</p>
           </div>
-          <button
-            onClick={() => selectCommit(null)}
-            className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary flex-shrink-0"
-          >
-            <X size={14} />
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <DiffWhitespaceToggle />
+            <button
+              onClick={() => selectCommit(null)}
+              className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary"
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
 
         {/* Outer = controlled height + clip. Inner measureRef = natural height for measurement. */}
@@ -321,13 +368,15 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
         </div>
       </div>
 
+      <WhitespaceSuppressionNotice suppressed={suppressed} mode={whitespace} />
+
       {/* Diff takes remaining space */}
       <div ref={diffWrapRef} className="flex-1 overflow-hidden">
         {diff ? (
           <DiffView diff={diff} repoPath={repoPath} commit={commit.hash} />
         ) : (
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
-            Loading diff...
+            {diffLoading ? 'Loading diff...' : emptyDiffMessage}
           </div>
         )}
       </div>

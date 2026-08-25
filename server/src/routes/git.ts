@@ -206,18 +206,28 @@ router.get('/tags', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: tags });
 }));
 
+// `ws` selects the whitespace filter (none | eol | all). It defaults to none
+// here so the raw diff stays the API default; the client sends its own setting.
 router.get('/diff', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const { commit, file } = req.query;
-  const diff = await withRepoLock(repoPath, () => gitService.getDiff(repoPath, commit as string, file as string));
-  res.json({ success: true, data: diff });
+  const { commit, file, ws } = req.query;
+  const payload = await withRepoLock(repoPath, () => gitService.getDiffWithMeta(repoPath, {
+    commitHash: commit as string,
+    filePath: file as string,
+    whitespace: gitService.parseWhitespaceMode(ws),
+  }));
+  res.json({ success: true, data: payload });
 }));
 
 router.get('/diff/staged', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const { file } = req.query;
-  const diff = await withRepoLock(repoPath, () => gitService.getStagedDiff(repoPath, file as string));
-  res.json({ success: true, data: diff });
+  const { file, ws } = req.query;
+  const payload = await withRepoLock(repoPath, () => gitService.getDiffWithMeta(repoPath, {
+    filePath: file as string,
+    staged: true,
+    whitespace: gitService.parseWhitespaceMode(ws),
+  }));
+  res.json({ success: true, data: payload });
 }));
 
 router.post('/stage-hunk', asyncHandler(async (req: Request, res: Response) => {

@@ -116,3 +116,30 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
+
+/**
+ * How aggressively a diff should hide whitespace-only differences.
+ * - `none` — raw `git diff` output.
+ * - `eol`  — `--ignore-cr-at-eol`: hides pure CRLF↔LF churn, which otherwise
+ *            reports every line of a file as changed.
+ * - `all`  — also hides indentation and blank-line-only changes.
+ */
+export type DiffWhitespaceMode = 'none' | 'eol' | 'all';
+
+/** Per-file report of what a whitespace filter removed from the visible diff. */
+export interface DiffWhitespaceSuppression {
+  path: string;
+  /** Added lines hidden by the filter. */
+  additions: number;
+  /** Removed lines hidden by the filter. */
+  deletions: number;
+  /** True when nothing but whitespace changed, so the file has no visible hunks. */
+  whollySuppressed: boolean;
+}
+
+export interface DiffPayload {
+  diff: string;
+  whitespace: DiffWhitespaceMode;
+  /** Empty when `whitespace` is `none` or nothing was filtered out. */
+  suppressed: DiffWhitespaceSuppression[];
+}

@@ -2,7 +2,16 @@ import simpleGit, { SimpleGit } from 'simple-git';
 import { execSync } from 'child_process';
 import { readFileSync, readdirSync, existsSync, statSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import type { GitCommit, GitBranch, GitTag, GitFileStatus, GitStatus } from '@sikagit/shared';
+import type {
+  GitCommit,
+  GitBranch,
+  GitTag,
+  GitFileStatus,
+  GitStatus,
+  DiffWhitespaceMode,
+  DiffWhitespaceSuppression,
+  DiffPayload,
+} from '@sikagit/shared';
 import { normalizePath } from './pathService';
 import { isRepoSlowByPath } from './db';
 
@@ -525,13 +534,41 @@ function capDiff(diff: string): string {
   return `${DIFF_TOO_LARGE_MARKER} ${diff.length}\n`;
 }
 
-export async function getDiff(
-  repoPath: string,
-  commitHash?: string,
-  filePath?: string
-): Promise<string> {
-  const git = getGit(repoPath);
+/**
+ * Git flags for each whitespace mode.
+ *
+ * `--ignore-cr-at-eol` is the one that matters in practice: when a file's line
+ * endings flip (CRLF → LF, e.g. an editor or formatter rewriting the file),
+ * every single line differs and git honestly reports a whole-file rewrite —
+ * all `-` lines followed by all `+` lines — burying the handful of real edits.
+ */
+function whitespaceArgs(mode: DiffWhitespaceMode): string[] {
+  switch (mode) {
+    case 'eol':
+      return ['--ignore-cr-at-eol'];
+    case 'all':
+      return ['--ignore-cr-at-eol', '--ignore-all-space', '--ignore-blank-lines'];
+    default:
+      return [];
+  }
+}
+
+/** Coerce an untrusted query value into a valid whitespace mode. */
+export function parseWhitespaceMode(value: unknown): DiffWhitespaceMode {
+  return value === 'eol' || value === 'all' ? value : 'none';
+}
+
+/**
+ * Build the revision / pathspec part of a `git diff` invocation (everything
+ * except the whitespace flags). Shared by the patch and the --numstat passes so
+ * both always describe exactly the same set of changes.
+ */
+function diffScopeArgs(repoPath: string, commitHash?: string, filePath?: string, staged?: boolean): string[] {
   const args: string[] = [];
+
+  if (staged) {
+    args.push('--cached');
+  }
 
   if (commitHash) {
     // Root commits have no parent, so `commitHash~1` errors out. Detect that
@@ -549,6 +586,68 @@ export async function getDiff(
     args.push('--', filePath);
   }
 
+  return args;
+}
+
+/** `path -> {additions, deletions}` from `git diff --numstat`. Binary files are skipped. */
+async function numstat(repoPath: string, args: string[]): Promise<Map<string, { additions: number; deletions: number }>> {
+  const out = await getGit(repoPath).diff(['--numstat', ...args]);
+  const stats = new Map<string, { additions: number; deletions: number }>();
+  for (const line of out.split('\n')) {
+    if (!line.trim()) continue;
+    const [additions, deletions, ...pathParts] = line.split('\t');
+    // Binary files report "-" for both counts — nothing to compare line-wise.
+    if (additions === '-' || deletions === '-') continue;
+    stats.set(pathParts.join('\t'), {
+      additions: parseInt(additions, 10) || 0,
+      deletions: parseInt(deletions, 10) || 0,
+    });
+  }
+  return stats;
+}
+
+/**
+ * Diff the same scope twice — raw and filtered — and report what the filter
+ * removed. This is what lets the UI say "12 lines changed, 254 line-ending-only
+ * lines hidden" instead of silently showing a smaller (or empty) diff.
+ */
+async function whitespaceSuppression(
+  repoPath: string,
+  scope: string[],
+  mode: DiffWhitespaceMode
+): Promise<DiffWhitespaceSuppression[]> {
+  if (mode === 'none') return [];
+
+  const [raw, filtered] = await Promise.all([
+    numstat(repoPath, scope),
+    numstat(repoPath, [...whitespaceArgs(mode), ...scope]),
+  ]);
+
+  const suppressed: DiffWhitespaceSuppression[] = [];
+  for (const [path, rawStat] of raw) {
+    const visible = filtered.get(path) ?? { additions: 0, deletions: 0 };
+    const additions = rawStat.additions - visible.additions;
+    const deletions = rawStat.deletions - visible.deletions;
+    if (additions <= 0 && deletions <= 0) continue;
+    suppressed.push({
+      path,
+      additions,
+      deletions,
+      whollySuppressed: visible.additions === 0 && visible.deletions === 0,
+    });
+  }
+  return suppressed;
+}
+
+export async function getDiff(
+  repoPath: string,
+  commitHash?: string,
+  filePath?: string,
+  whitespace: DiffWhitespaceMode = 'none'
+): Promise<string> {
+  const git = getGit(repoPath);
+  const args = [...whitespaceArgs(whitespace), ...diffScopeArgs(repoPath, commitHash, filePath)];
+
   const diff = await git.diff(args);
 
   // If no diff and we have a file path, it might be untracked — generate synthetic diff
@@ -557,6 +656,34 @@ export async function getDiff(
   }
 
   return capDiff(diff);
+}
+
+/**
+ * Diff plus the whitespace-suppression report the UI needs to explain an
+ * unexpectedly small (or empty) diff. Single entry point for the HTTP routes.
+ */
+export async function getDiffWithMeta(
+  repoPath: string,
+  opts: { commitHash?: string; filePath?: string; staged?: boolean; whitespace?: DiffWhitespaceMode } = {}
+): Promise<DiffPayload> {
+  const whitespace = opts.whitespace ?? 'none';
+  const diff = opts.staged
+    ? await getStagedDiff(repoPath, opts.filePath, whitespace)
+    : await getDiff(repoPath, opts.commitHash, opts.filePath, whitespace);
+
+  // A capped diff was never fully generated, so a second numstat pass over it
+  // would be just as expensive as the one we refused to send.
+  if (diff.startsWith(DIFF_TOO_LARGE_MARKER)) {
+    return { diff, whitespace, suppressed: [] };
+  }
+
+  const suppressed = await whitespaceSuppression(
+    repoPath,
+    diffScopeArgs(repoPath, opts.commitHash, opts.filePath, opts.staged),
+    whitespace
+  );
+
+  return { diff, whitespace, suppressed };
 }
 
 function generateUntrackedDiff(repoPath: string, filePath: string): string {
@@ -608,12 +735,13 @@ export async function getCommitFiles(repoPath: string, commitHash: string): Prom
   });
 }
 
-export async function getStagedDiff(repoPath: string, filePath?: string): Promise<string> {
+export async function getStagedDiff(
+  repoPath: string,
+  filePath?: string,
+  whitespace: DiffWhitespaceMode = 'none'
+): Promise<string> {
   const git = getGit(repoPath);
-  const args = ['--cached'];
-  if (filePath) {
-    args.push('--', filePath);
-  }
+  const args = [...whitespaceArgs(whitespace), ...diffScopeArgs(repoPath, undefined, filePath, true)];
   return capDiff(await git.diff(args));
 }
 

@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { X, FileText } from 'lucide-react';
+import type { DiffWhitespaceSuppression } from '@sikagit/shared';
 import { useStatusStore } from '../../store/statusStore';
 import { useConfirmStore } from '../../store/confirmStore';
+import { useUIStore } from '../../store/uiStore';
 import { api } from '../../lib/api';
 import { DiffView } from './DiffView';
+import { DiffWhitespaceToggle, WhitespaceSuppressionNotice } from './DiffWhitespaceControls';
 import { ImagePreview, isImageFile, isBinaryFile } from './ImagePreview';
 
 interface FileDiffPanelProps {
@@ -54,21 +57,29 @@ function extractHunkPatch(rawDiff: string, hunkGlobalIndex: number): string | nu
 export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
   const { selectedFile, selectedFileSource, selectFile, fetchStatus } = useStatusStore();
   const [diff, setDiff] = useState<string>('');
+  const [suppressed, setSuppressed] = useState<DiffWhitespaceSuppression[]>([]);
   const [loading, setLoading] = useState(false);
   const confirm = useConfirmStore(s => s.confirm);
+  const whitespace = useUIStore(s => s.diffWhitespace);
 
   const loadDiff = useCallback(() => {
     if (!selectedFile || !selectedFileSource) return;
     setLoading(true);
     const fetchDiff = selectedFileSource === 'staged'
-      ? api.getStagedDiff(repoPath, selectedFile)
-      : api.getDiff(repoPath, undefined, selectedFile);
+      ? api.getStagedDiff(repoPath, selectedFile, whitespace)
+      : api.getDiff(repoPath, undefined, selectedFile, whitespace);
 
     fetchDiff
-      .then(setDiff)
-      .catch(() => setDiff(''))
+      .then(payload => {
+        setDiff(payload.diff);
+        setSuppressed(payload.suppressed);
+      })
+      .catch(() => {
+        setDiff('');
+        setSuppressed([]);
+      })
       .finally(() => setLoading(false));
-  }, [selectedFile, selectedFileSource, repoPath]);
+  }, [selectedFile, selectedFileSource, repoPath, whitespace]);
 
   useEffect(() => {
     loadDiff();
@@ -101,6 +112,15 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
   if (!selectedFile) return null;
 
   const showHunkActions = selectedFileSource === 'unstaged';
+  // A filtered diff no longer matches the file byte-for-byte, so a patch built
+  // from it would be rejected by `git apply`. Keep the buttons visible but inert
+  // so the reason is discoverable rather than the controls just vanishing.
+  const hunkActionsDisabledReason = whitespace !== 'none'
+    ? 'Set "Ignore" to none to stage or discard individual hunks — patches built from a filtered diff will not apply.'
+    : undefined;
+  // Everything about this file was whitespace: no hunks to show, but "No changes
+  // to display" would be a lie.
+  const onlyWhitespaceChanged = !diff.trim() && suppressed.some(f => f.whollySuppressed);
 
   // Server sentinel for oversized diffs (see gitService.ts DIFF_TOO_LARGE_MARKER).
   const isOversizeDiff = diff.startsWith('__SIKAGIT_DIFF_TOO_LARGE__');
@@ -118,13 +138,18 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
             ({selectedFileSource})
           </span>
         </div>
-        <button
-          onClick={() => selectFile(null)}
-          className="p-0.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary flex-shrink-0"
-        >
-          <X size={14} />
-        </button>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <DiffWhitespaceToggle />
+          <button
+            onClick={() => selectFile(null)}
+            className="p-0.5 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
+
+      <WhitespaceSuppressionNotice suppressed={suppressed} mode={whitespace} />
 
       <div className="flex-1 overflow-hidden">
         {loading ? (
@@ -141,10 +166,20 @@ export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
           </div>
         ) : isImageFile(selectedFile) ? (
           <ImagePreview repoPath={repoPath} filePath={selectedFile} />
+        ) : onlyWhitespaceChanged ? (
+          <div className="flex flex-col items-center justify-center h-full gap-1 px-6 text-center">
+            <span className="text-sm text-text-secondary">
+              {whitespace === 'eol' ? 'Only the line endings changed' : 'Only whitespace changed'}
+            </span>
+            <span className="text-xs text-text-muted">
+              No content differences in this file.
+            </span>
+          </div>
         ) : (
           <DiffView
             diff={diff}
             repoPath={repoPath}
+            hunkActionsDisabledReason={hunkActionsDisabledReason}
             onStageHunk={showHunkActions ? handleStageHunk : undefined}
             onDiscardHunk={showHunkActions ? (async (hunkIndex: number) => {
               const confirmed = await confirm({
