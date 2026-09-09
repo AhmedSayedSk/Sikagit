@@ -75,7 +75,7 @@ export const useUIStore = create<UIState>()(
       activePanel: 'log',
       theme: 'dark',
       fontSize: 14,
-      diffFontSize: 12,
+      diffFontSize: 11,
       diffLineHeight: 3,
       // Defaults to 'eol': line-ending churn is never worth reading, and left
       // unfiltered it reports every line of a file as changed.
@@ -141,6 +141,16 @@ export const useUIStore = create<UIState>()(
       setBackgroundSmartCommit: (v: boolean) => set({ backgroundSmartCommit: v }),
       setBackgroundSmartCommitPush: (v: boolean) => set({ backgroundSmartCommitPush: v }),
     }),
-    { name: 'sikagit-ui' }
+    {
+      name: 'sikagit-ui',
+      version: 1,
+      // v1: the diff font default dropped from 12px to 11px; carry users who
+      // never changed it over to the new default, keep explicit choices.
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<UIState>;
+        if (version < 1 && state.diffFontSize === 12) state.diffFontSize = 11;
+        return state as UIState;
+      },
+    }
   )
 );
