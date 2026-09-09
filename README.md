@@ -119,7 +119,7 @@ _Coming soon._ To add them, drop the image files at the paths below and uncommen
 | Frontend | React 19 · Vite 6 · TailwindCSS 4 · Zustand 5 · Radix UI · Lucide / react-icons |
 | Backend | Node.js 22 · Express 4 · simple-git 3 · Socket.io 4 |
 | Database | SQLite (better-sqlite3) |
-| AI | Google Gemini (`gemini-2.5-pro`, bring your own API key) |
+| AI | Google Gemini (`gemini-3.8-flash`, bring your own API key) |
 | Infra | Docker · Docker Compose · npm workspaces |
 | Language | TypeScript 5.9 (types shared across client & server) |
 

@@ -4,6 +4,9 @@ import * as gitService from '../services/gitService';
 import { withRepoLock } from '../services/gitService';
 import * as aiService from '../services/aiService';
 
+// Fallback when the client sends no model (keep in sync with client/src/store/uiStore.ts).
+const DEFAULT_AI_MODEL = 'gemini-3.8-flash';
+
 const router = Router();
 router.use(validateRepoPath);
 
@@ -31,7 +34,7 @@ router.post('/suggest', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  const result = await aiService.suggestCommitMessage(apiKey, model || 'gemini-2.5-pro', diff);
+  const result = await aiService.suggestCommitMessage(apiKey, model || DEFAULT_AI_MODEL, diff);
   res.json({ success: true, data: result });
 }));
 
@@ -50,7 +53,7 @@ router.post('/suggest-save-for-later', asyncHandler(async (req: Request, res: Re
   }
 
   const diff = await withRepoLock(repoPath, () => gitService.getDiff(repoPath, undefined, undefined, 'eol'));
-  const result = await aiService.suggestSaveForLater(apiKey, model || 'gemini-2.5-pro', files, diff || '');
+  const result = await aiService.suggestSaveForLater(apiKey, model || DEFAULT_AI_MODEL, files, diff || '');
   res.json({ success: true, data: result });
 }));
 
@@ -76,7 +79,7 @@ router.post('/smart-commit/preview', asyncHandler(async (req: Request, res: Resp
   }
 
   const stagedFiles = status.staged.map(f => f.path);
-  const groups = await aiService.suggestSmartCommitGroups(apiKey, model || 'gemini-2.5-pro', diff, stagedFiles);
+  const groups = await aiService.suggestSmartCommitGroups(apiKey, model || DEFAULT_AI_MODEL, diff, stagedFiles);
 
   res.json({ success: true, data: { groups } });
 }));

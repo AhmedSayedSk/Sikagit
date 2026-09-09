@@ -68,6 +68,10 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+// Gemini model used for AI suggestions. Saved 2.x choices are migrated here (v3).
+export const DEFAULT_AI_MODEL = 'gemini-3.8-flash';
+const SUPPORTED_AI_MODELS = new Set([DEFAULT_AI_MODEL]);
+
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
@@ -94,7 +98,7 @@ export const useUIStore = create<UIState>()(
       demoMode: false,
       aiEnabled: false,
       aiApiKey: '',
-      aiModel: 'gemini-2.5-pro',
+      aiModel: DEFAULT_AI_MODEL,
       backgroundSmartCommit: false,
       backgroundSmartCommitPush: false,
 
@@ -143,13 +147,16 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'sikagit-ui',
-      version: 2,
-      // The diff font default dropped 12px -> 11px (v1) -> 10px (v2); carry
-      // users still on a previous default over, keep explicit choices.
+      version: 3,
+      // v1/v2: the diff font default dropped 12px -> 11px -> 10px; carry users
+      // still on a previous default over, keep explicit choices.
+      // v3: the Gemini 2.x models were retired; anything not in the supported
+      // list becomes the current default.
       migrate: (persisted, version) => {
         const state = persisted as Partial<UIState>;
         if (version < 1 && state.diffFontSize === 12) state.diffFontSize = 11;
         if (version < 2 && state.diffFontSize === 11) state.diffFontSize = 10;
+        if (version < 3 && !SUPPORTED_AI_MODELS.has(state.aiModel ?? '')) state.aiModel = DEFAULT_AI_MODEL;
         return state as UIState;
       },
     }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X, Settings, Minus, Plus, Type, Code2, Palette, RotateCcw, Sparkles, Eye, EyeOff } from 'lucide-react';
-import { useUIStore } from '../../store/uiStore';
+import { DEFAULT_AI_MODEL, useUIStore } from '../../store/uiStore';
 import { cn } from '../../lib/utils';
 
 interface AppSettingsDialogProps {
@@ -16,10 +16,10 @@ const tabs: { id: Tab; label: string; icon: typeof Type }[] = [
   { id: 'ai', label: 'AI', icon: Sparkles },
 ];
 
+// Only the current stable Flash model is offered; the 2.x models were retired
+// from this list (the store migrates any saved 2.x choice to this default).
 const AI_MODELS = [
-  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+  { id: DEFAULT_AI_MODEL, label: 'Gemini 3.8 Flash' },
 ];
 
 function SizeControl({ label, value, onChange, min, max, description }: {
@@ -141,7 +141,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDraftDemoMode(false);
     setDraftAiEnabled(false);
     setDraftAiApiKey('');
-    setDraftAiModel('gemini-2.5-pro');
+    setDraftAiModel(DEFAULT_AI_MODEL);
     setDraftBgSmartCommit(false);
     setDraftBgSmartCommitPush(false);
   };
