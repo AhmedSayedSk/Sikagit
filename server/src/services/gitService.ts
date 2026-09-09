@@ -13,7 +13,7 @@ import type {
   DiffPayload,
 } from '@sikagit/shared';
 import { normalizePath } from './pathService';
-import { isRepoSlowByPath } from './db';
+import { clearRepoSlow, getSlowInfoByPath, isRepoSlowByPath, isSlowProbeDue, markRepoSlow } from './db';
 
 const STATUS_TIMEOUT_MS = parseInt(process.env.STATUS_TIMEOUT_MS || '20000', 10);
 
@@ -188,21 +188,26 @@ async function hasCommits(repoPath: string): Promise<boolean> {
 }
 
 
+/** Which untracked-file scan `git status` should do. */
+export type UntrackedMode =
+  | 'full'   // scan untracked files (git's default `-u`)
+  | 'none'   // `--untracked-files=no`: skip the working-tree walk
+  | 'auto';  // 'none' for repos currently in slow mode, otherwise 'full'
+
 /**
  * Build the option array for simple-git's `.status()`.
  *
  * simple-git always hard-codes `status --porcelain -b -u --null`, where `-u`
- * (= --untracked-files=all) forces a full walk/stat of the working tree. On the
- * slow WSL /mnt/d (DrvFs) mount a huge tree like ClientGame (~800 MB) takes
- * 15-18s for that walk and blows the status timeout.
+ * (= --untracked-files=all) forces a full walk/stat of the working tree. For a
+ * huge tree on a slow filesystem that walk alone can blow the status timeout.
  *
- * For repos flagged slow_mode we append `--untracked-files=no`. git takes the
- * LAST untracked flag, so this overrides simple-git's `-u` and skips the
- * untracked scan entirely while keeping `-b`/`--porcelain`/`--null` intact.
- * ClientGame's .gitignore is `*` + a whitelist, so it has zero reportable
- * untracked files — the result is identical, just near-instant.
+ * With mode 'none' we append `--untracked-files=no`. git takes the LAST
+ * untracked flag, so this overrides simple-git's `-u` and skips the untracked
+ * scan entirely while keeping `-b`/`--porcelain`/`--null` intact.
  */
-function statusOptionsFor(repoPath: string): string[] {
+function statusOptionsFor(repoPath: string, mode: UntrackedMode = 'auto'): string[] {
+  if (mode === 'none') return ['--untracked-files=no'];
+  if (mode === 'full') return [];
   try {
     if (isRepoSlowByPath(normalizePath(repoPath))) {
       return ['--untracked-files=no'];
@@ -211,11 +216,33 @@ function statusOptionsFor(repoPath: string): string[] {
   return [];
 }
 
+/**
+ * `git status` for the open repo, with slow-mode self-healing.
+ *
+ * A repo in slow mode whose retry window has elapsed gets one full scan
+ * (bounded by STATUS_TIMEOUT_MS). Success clears the flag, so untracked files
+ * show up again; a timeout extends the backoff and falls back to the fast scan.
+ */
+async function statusWithProbe(git: SimpleGit, normalized: string) {
+  const info = getSlowInfoByPath(normalized);
+  if (info?.slowMode && isSlowProbeDue(info)) {
+    try {
+      const status = await withTimeout(() => git.status([]), STATUS_TIMEOUT_MS, 'status');
+      clearRepoSlow(info.id);
+      return status;
+    } catch (err) {
+      if (!(err instanceof GitTimeoutError)) throw err;
+      markRepoSlow(info.id, new Date().toISOString());
+    }
+  }
+  return git.status(statusOptionsFor(normalized));
+}
+
 export async function getStatus(repoPath: string): Promise<GitStatus> {
   const git = getGit(repoPath);
-  const status = await git.status(statusOptionsFor(repoPath));
-
   const normalized = normalizePath(repoPath);
+  const status = await statusWithProbe(git, normalized);
+
   const mapFile = (f: { path: string; index: string; working_dir: string }): GitFileStatus => {
     let size: number | undefined;
     // Only get size for files that exist on disk (not deleted)
@@ -258,7 +285,7 @@ export async function getStatus(repoPath: string): Promise<GitStatus> {
   };
 }
 
-export async function getStatusSummary(repoPath: string): Promise<{
+export async function getStatusSummary(repoPath: string, untracked: UntrackedMode = 'auto'): Promise<{
   ahead: number;
   behind: number;
   hasChanges: boolean;
@@ -269,7 +296,7 @@ export async function getStatusSummary(repoPath: string): Promise<{
 }> {
   return withTimeout(async () => {
     const git = getGit(repoPath);
-    const status = await git.status(statusOptionsFor(repoPath));
+    const status = await git.status(statusOptionsFor(repoPath, untracked));
     let hasRemote = false;
     try {
       const url = (await git.raw(['config', '--local', 'remote.origin.url'])).trim();

@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { RepoBookmark } from '@sikagit/shared';
 import { api } from '../lib/api';
 import { refreshOpenRepo } from '../lib/repoRefresh';
+import { useRepoStatusStore } from './repoStatusStore';
 
 interface RepoState {
   repos: RepoBookmark[];
@@ -35,6 +36,7 @@ export const useRepoStore = create<RepoState>()(
         try {
           const repos = await api.getRepos();
           set({ repos, loading: false });
+          useRepoStatusStore.getState().seedSlow(repos.filter(r => r.slowMode).map(r => r.id));
         } catch (err: any) {
           set({ error: err.message, loading: false });
         }

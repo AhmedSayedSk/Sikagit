@@ -14,14 +14,17 @@ interface RepoStatusSummary {
 
 interface RepoStatusState {
   summaries: Record<string, RepoStatusSummary>;
-  slowMode: Set<string>;            // ids currently flagged slow on the server
+  slowMode: Set<string>;            // ids currently in slow mode on the server (fast scan, auto-retried)
   inFlight: Set<string>;
   loadCached: (ids: string[]) => Promise<void>;
   refreshSubset: (repos: { id: string; path: string; slowMode?: boolean }[]) => Promise<void>;
   forceRefreshOne: (repo: { id: string; path: string }) => Promise<void>;
   // Write a freshly-derived summary directly (e.g. from a full status load),
-  // bypassing a separate git round-trip. Clears any slow-mode flag for the repo.
+  // bypassing a separate git round-trip.
   setSummary: (id: string, summary: RepoStatusSummary) => void;
+  // Seed the slow-mode set from the bookmarks list (server-side flag) so the
+  // badge is right before the first refresh response arrives.
+  seedSlow: (ids: string[]) => void;
 }
 
 export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
@@ -41,10 +44,10 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
 
   refreshSubset: async (repos) => {
     if (repos.length === 0) return;
-    const { inFlight, slowMode } = get();
-    // Drop repos already in-flight OR already flagged slow on the client side.
-    // (Server also filters slow repos, but doing it here saves the round-trip.)
-    const filtered = repos.filter(r => !inFlight.has(r.id) && !slowMode.has(r.id));
+    const { inFlight } = get();
+    // Slow-mode repos are refreshed too: the server runs a fast scan for them
+    // and retries the full scan on its own backoff schedule.
+    const filtered = repos.filter(r => !inFlight.has(r.id));
     if (filtered.length === 0) return;
 
     const nextInFlight = new Set(inFlight);
@@ -58,10 +61,8 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
       const slow = new Set(get().slowMode);
       for (const id of Object.keys(data)) {
         const entry = data[id];
-        if (entry.skipped === true) {
-          slow.add(id);
-        } else {
-          slow.delete(id);
+        if (entry.slowMode) slow.add(id); else slow.delete(id);
+        if (entry.skipped !== true) {
           // Refresh-response fields are all optional on the wire; a non-skipped
           // entry always carries them, but normalize so the required-field
           // RepoStatusSummary stays sound (esp. the staged/unstaged flags).
@@ -98,10 +99,8 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
       const data = await api.refreshStatusSummaryOne(repo.id, repo.path);
       const summaries = { ...get().summaries };
       const slow = new Set(get().slowMode);
-      if (data.skipped === true) {
-        slow.add(repo.id);
-      } else {
-        slow.delete(repo.id);
+      if (data.slowMode) slow.add(repo.id); else slow.delete(repo.id);
+      if (data.skipped !== true) {
         summaries[repo.id] = {
           ahead: data.ahead ?? 0,
           behind: data.behind ?? 0,
@@ -124,11 +123,10 @@ export const useRepoStatusStore = create<RepoStatusState>()((set, get) => ({
   },
 
   setSummary: (id, summary) =>
-    set(state => {
-      const slow = new Set(state.slowMode);
-      slow.delete(id);
-      return { summaries: { ...state.summaries, [id]: summary }, slowMode: slow };
-    }),
+    set(state => ({ summaries: { ...state.summaries, [id]: summary } })),
+
+  seedSlow: (ids) =>
+    set({ slowMode: new Set(ids) }),
 }));
 
 // --- Refresh queue (visible-row debouncer) ---
@@ -155,10 +153,6 @@ export function enqueueRepoRefresh(
   opts?: { force?: boolean }
 ) {
   if (!opts?.force) {
-    // Skip server-flagged slow repos AND client-cached slow flag.
-    const { slowMode } = useRepoStatusStore.getState();
-    if (repo.slowMode || slowMode.has(repo.id)) return;
-
     const cached = useRepoStatusStore.getState().summaries[repo.id];
     if (cached?.computedAt) {
       const age = Date.now() - new Date(cached.computedAt).getTime();

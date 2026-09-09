@@ -32,47 +32,68 @@ router.get('/status-summary/cached', (req: Request, res: Response) => {
   res.json({ success: true, data: out });
 });
 
-// Compute fresh summaries for a subset of repos and write them through to the cache.
-// Skips repos flagged as slow_mode=1 unless force=true. On timeout, marks the
-// repo slow. On success against a previously-slow repo, clears the flag.
+type SummaryEntry =
+  | {
+      ahead: number; behind: number; hasChanges: boolean; hasStaged: boolean; hasUnstaged: boolean; hasRemote: boolean;
+      computedAt: string;
+      lastCommitAt: string | null;
+      slowMode: boolean;
+    }
+  | { skipped: true; reason: 'slow'; slowMode: true; lastTimedOutAt: string };
+
+/**
+ * Compute one repo's summary with slow-mode handling:
+ *
+ * - normal repo: full scan; a timeout puts it in slow mode and falls through
+ *   to the fast scan so the badge still refreshes.
+ * - slow-mode repo: fast scan (untracked files skipped), except when its retry
+ *   window has elapsed (or `probe` is set by a user-initiated refresh): then the
+ *   full scan is attempted first, and success clears the flag. Every timeout
+ *   bumps the backoff (1, 2, 4 … 30 min).
+ *
+ * Non-timeout errors (deleted repo, not a git repo…) propagate to the caller.
+ */
+async function summarizeRepo(id: string, repoPath: string, probe: boolean): Promise<SummaryEntry> {
+  const info = db.getSlowInfoById(id);
+  const slow = !!info?.slowMode;
+  const tryFull = !slow || probe || (info !== undefined && db.isSlowProbeDue(info));
+
+  if (tryFull) {
+    try {
+      const summary = await gitService.getStatusSummary(repoPath, 'full');
+      if (slow) db.clearRepoSlow(id);
+      db.upsertRepoStatusSummary(id, summary);
+      return { ...summary, computedAt: new Date().toISOString(), slowMode: false };
+    } catch (err) {
+      if (!(err instanceof gitService.GitTimeoutError)) throw err;
+      db.markRepoSlow(id, new Date().toISOString());
+    }
+  }
+
+  try {
+    const summary = await gitService.getStatusSummary(repoPath, 'none');
+    db.upsertRepoStatusSummary(id, summary);
+    return { ...summary, computedAt: new Date().toISOString(), slowMode: true };
+  } catch (err) {
+    if (!(err instanceof gitService.GitTimeoutError)) throw err;
+    const at = new Date().toISOString();
+    db.markRepoSlow(id, at);
+    return { skipped: true, reason: 'slow', slowMode: true, lastTimedOutAt: at };
+  }
+}
+
+// Compute fresh summaries for a subset of repos and write them through to the
+// cache. Slow-mode repos are included (fast scan) and retried in full on their
+// own schedule — see summarizeRepo.
 router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Response) => {
-  const { repos: incoming, force } = req.body as {
-    repos: { id: string; path: string }[];
-    force?: boolean;
-  };
-  if (!Array.isArray(incoming)) {
+  const { repos } = req.body as { repos: { id: string; path: string }[] };
+  if (!Array.isArray(repos)) {
     res.status(400).json({ success: false, error: 'repos array required' });
     return;
   }
 
-  // Previously we filtered out slow_mode repos here so a huge repo's `git status`
-  // couldn't stall the sweep. That's no longer necessary: slow_mode now drives a
-  // fast `--untracked-files=no` status (see gitService.statusOptionsFor), so slow
-  // repos compute quickly and SHOULD be included so their dashboard summary stays
-  // fresh. We keep slowIds only to annotate the response (the sidebar still shows
-  // a "slow" indicator), not to skip work.
-  const slowIds = new Set(db.getSlowRepoIds());
-  const repos = incoming;
-
   const { normalizePath } = await import('../services/pathService');
-  const results: Record<string, {
-    ahead?: number; behind?: number; hasChanges?: boolean; hasStaged?: boolean; hasUnstaged?: boolean; hasRemote?: boolean;
-    computedAt?: string;
-    lastCommitAt?: string | null;
-    skipped?: boolean;
-    reason?: string;
-    slowMode?: boolean;
-    lastTimedOutAt?: string;
-  }> = {};
-
-  // Slow repos are no longer skipped — they compute via the fast -uno path.
-  // We still surface slowMode in the response so the sidebar can badge them.
-  // (Per-repo results below overwrite this with the computed summary.)
-  const requestedIds = new Set(incoming.map(r => r.id));
-  const slowRequested = [...slowIds].filter(id => requestedIds.has(id));
-  for (const id of slowRequested) {
-    results[id] = { slowMode: true };
-  }
+  const results: Record<string, SummaryEntry> = {};
 
   let cursor = 0;
   const worker = async () => {
@@ -81,27 +102,13 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
       if (idx >= repos.length) return;
       const { id, path: repoPath } = repos[idx];
       try {
-        const normalized = normalizePath(repoPath);
-        const summary = await gitService.getStatusSummary(normalized);
-        db.upsertRepoStatusSummary(id, summary);
-        // NOTE: we intentionally do NOT clearRepoSlow here. slow_mode is what
-        // selects the fast --untracked-files=no status for huge repos; clearing
-        // it would revert them to the full -u walk and they'd time out again
-        // (flap). A repo only leaves slow_mode via the explicit user-initiated
-        // force refresh (refresh-one).
-        results[id] = { ...summary, computedAt: new Date().toISOString(), slowMode: slowIds.has(id) };
-      } catch (err) {
-        if (err instanceof gitService.GitTimeoutError) {
-          const at = new Date().toISOString();
-          db.markRepoSlow(id, at);
-          results[id] = { skipped: true, reason: 'slow', slowMode: true, lastTimedOutAt: at };
-        } else {
-          // Error contract: this route is called by the background auto-refresh
-          // sweep, so non-timeout errors (deleted repo, not a git repo, etc.) are
-          // silently dropped from results — the client falls back to its cached
-          // value. For user-initiated single-repo refreshes, see /refresh-one
-          // which surfaces failures via HTTP 500 instead.
-        }
+        results[id] = await summarizeRepo(id, normalizePath(repoPath), false);
+      } catch {
+        // Error contract: this route is called by the background auto-refresh
+        // sweep, so non-timeout errors (deleted repo, not a git repo, etc.) are
+        // silently dropped from results — the client falls back to its cached
+        // value. For user-initiated single-repo refreshes, see /refresh-one
+        // which surfaces failures via HTTP 500 instead.
       }
     }
   };
@@ -113,13 +120,13 @@ router.post('/status-summary/refresh', asyncHandler(async (req: Request, res: Re
   res.json({ success: true, data: results });
 }));
 
-// Single-repo force refresh — used by the sidebar's right-click "Refresh status (force)".
-// Always bypasses the slow-mode filter. Same per-call timeout applies, so this is safe
-// to call against a slow repo — at worst it re-marks slow.
+// Single-repo refresh — used by the sidebar's right-click "Refresh status".
+// Always attempts the full scan (ignoring the retry backoff), so a repo that is
+// fast again leaves slow mode immediately. Same per-call timeout applies, so at
+// worst it stays in slow mode with a longer backoff.
 router.post('/status-summary/refresh-one', asyncHandler(async (req: Request, res: Response) => {
-  // Error contract: this route is called from the user-initiated "Refresh status
-  // (force)" action. Non-timeout failures bubble up as HTTP 500 so the UI can
-  // surface a toast. Timeout failures, by contrast, are reported as
+  // Error contract: non-timeout failures bubble up as HTTP 500 so the UI can
+  // surface a toast. Timeout failures are reported as
   // {success:true, data:{skipped:true,...}} to match the batch route shape.
   const { id, path: repoPath } = req.body as { id: string; path: string };
   if (!id || !repoPath) {
@@ -128,32 +135,10 @@ router.post('/status-summary/refresh-one', asyncHandler(async (req: Request, res
   }
   const { normalizePath } = await import('../services/pathService');
   try {
-    const normalized = normalizePath(repoPath);
-    const summary = await gitService.getStatusSummary(normalized);
-    db.upsertRepoStatusSummary(id, summary);
-    // Do NOT auto-clear slow_mode here. For huge repos (e.g. ClientGame on the
-    // DrvFs /mnt/d mount) slow_mode is the switch that selects the fast
-    // --untracked-files=no status; clearing it reverts to the full -u walk and
-    // the repo times out again on the next sweep. slow_mode is now a benign,
-    // sticky "use the fast untracked-skip status" marker (the result is identical
-    // for these repos). Clear it manually in the DB only if a repo truly no longer
-    // needs it.
-    const stillSlow = db.isRepoSlowByPath(normalized);
-    res.json({
-      success: true,
-      data: { ...summary, computedAt: new Date().toISOString(), slowMode: stillSlow },
-    });
+    const data = await summarizeRepo(id, normalizePath(repoPath), true);
+    res.json({ success: true, data });
   } catch (err) {
-    if (err instanceof gitService.GitTimeoutError) {
-      const at = new Date().toISOString();
-      db.markRepoSlow(id, at);
-      res.json({
-        success: true,
-        data: { skipped: true, reason: 'slow', slowMode: true, lastTimedOutAt: at },
-      });
-    } else {
-      res.status(500).json({ success: false, error: (err as Error).message });
-    }
+    res.status(500).json({ success: false, error: (err as Error).message });
   }
 }));
 

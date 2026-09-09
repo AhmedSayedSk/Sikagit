@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot, CloudOff, MoreVertical, ListOrdered } from 'lucide-react';
+import { Plus, Trash2, FolderGit2, SlidersHorizontal, FolderKanban, ChevronRight, GitBranch, Pencil, ArrowUp, ArrowDown, CircleDot, CloudOff, MoreVertical, ListOrdered, Zap } from 'lucide-react';
 import { getRepoIcon, isCustomImage } from '../../lib/repoIcons';
 import { useRepoStore } from '../../store/repoStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -47,28 +47,27 @@ const PROJECT_DOT_TITLE: Record<ChangeKind, string> = {
   changes: 'Repos with uncommitted changes',
 };
 
-function RepoStatusDot({ repoId, slowMode }: { repoId: string; slowMode?: boolean }) {
-  const summary = useRepoStatusStore(s => s.summaries[repoId]);
+const SLOW_MODE_TITLE =
+  'Large repository: status runs in fast mode (untracked files are not scanned). ' +
+  'The full scan is retried automatically at growing intervals; right-click to retry now.';
 
-  if (slowMode) {
-    return (
-      <span
-        style={{ opacity: 0.7, fontSize: 11, lineHeight: 1, width: 12, height: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-        title="Auto-refresh paused after timeout. Right-click → Refresh status to retry."
-        aria-label="slow"
-      >
-        ⏸
-      </span>
-    );
-  }
+function RepoStatusDot({ repoId }: { repoId: string }) {
+  const summary = useRepoStatusStore(s => s.summaries[repoId]);
+  const slowMode = useRepoStatusStore(s => s.slowMode.has(repoId));
 
   const { ahead = 0, behind = 0, hasChanges = false, hasStaged = false, hasUnstaged = false, hasRemote = true } = summary ?? {};
   const noRemote = summary !== undefined && !hasRemote;
   const changeKind = changeDotKind({ hasStaged, hasUnstaged, hasChanges });
-  if (ahead === 0 && behind === 0 && !hasChanges && !noRemote) return null;
+  const quiet = ahead === 0 && behind === 0 && !hasChanges && !noRemote;
+  if (quiet && !slowMode) return null;
 
   return (
     <span className="flex items-center justify-end gap-1.5 flex-shrink-0">
+      {slowMode && (
+        <span title={SLOW_MODE_TITLE} aria-label="fast mode" className="text-text-muted">
+          <Zap size={10} strokeWidth={2.5} />
+        </span>
+      )}
       {noRemote && (
         <span title="No remote origin configured" className="text-text-muted">
           <CloudOff size={11} strokeWidth={2.5} />
@@ -253,10 +252,10 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
   const onRepoContextMenu = (repo: RepoBookmark) => async (e: React.MouseEvent) => {
     e.preventDefault();
     const repoLabel = demoMode ? 'this repository' : `"${repo.name}"`;
-    if (!confirm(`Force refresh status for ${repoLabel}?`)) return;
+    if (!confirm(`Refresh status for ${repoLabel} now (full scan)?`)) return;
     await forceRefreshOne({ id: repo.id, path: repo.path });
     if (useRepoStatusStore.getState().slowMode.has(repo.id)) {
-      addToast('info', `${repoLabel} is still slow — try again later`);
+      addToast('info', `${repoLabel}: full scan still too slow — fast mode stays on and is retried automatically`);
     }
   };
 
@@ -452,7 +451,7 @@ function DraggableRepoList({ projectRepos, repoIds, activeRepoId, onSelectRepo, 
                     <div className="truncate font-medium demo-blur" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
                   </div>
                   <RepoActivityChip repoId={repo.id} />
-                  <RepoStatusDot repoId={repo.id} slowMode={repo.slowMode} />
+                  <RepoStatusDot repoId={repo.id} />
                 </div>
               </div>
             </div>
@@ -567,11 +566,11 @@ function RepoItem({ repo, isActive, onSelect }: {
     // (A proper menu UI is future polish; this satisfies the spec's
     // "right-click → refresh" affordance.)
     const repoLabel = demoMode ? 'this repository' : `"${repo.name}"`;
-    if (!confirm(`Force refresh status for ${repoLabel}?`)) return;
+    if (!confirm(`Refresh status for ${repoLabel} now (full scan)?`)) return;
     await forceRefreshOne({ id: repo.id, path: repo.path });
     // If still slow after the force refresh, tell the user.
     if (useRepoStatusStore.getState().slowMode.has(repo.id)) {
-      addToast('info', `${repoLabel} is still slow — try again later`);
+      addToast('info', `${repoLabel}: full scan still too slow — fast mode stays on and is retried automatically`);
     }
   };
 
@@ -592,7 +591,7 @@ function RepoItem({ repo, isActive, onSelect }: {
         <div className="truncate font-medium demo-blur" style={{ fontSize: fontSize - 4 }}>{repo.name}</div>
       </div>
       <RepoActivityChip repoId={repo.id} />
-      <RepoStatusDot repoId={repo.id} slowMode={repo.slowMode} />
+      <RepoStatusDot repoId={repo.id} />
     </div>
   );
 }

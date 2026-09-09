@@ -64,6 +64,10 @@ if (!repoColNames.has('slow_mode')) {
 if (!repoColNames.has('last_timed_out_at')) {
   db.exec('ALTER TABLE repos ADD COLUMN last_timed_out_at TEXT');
 }
+// timeout_count drives the retry backoff for slow-mode repos (see slowProbeDelayMs).
+if (!repoColNames.has('timeout_count')) {
+  db.exec('ALTER TABLE repos ADD COLUMN timeout_count INTEGER NOT NULL DEFAULT 0');
+}
 
 // --- Additive migration: repo_status_cache.has_staged / has_unstaged ---
 // Powers the 3-color sidebar change dot (green=unstaged, blue=staged, violet=both).
@@ -244,19 +248,64 @@ export function repoExistsByPath(repoPath: string): boolean {
 }
 
 // --- Slow-repo flag ---
+//
+// A repo enters slow mode when a full `git status` (untracked files included)
+// exceeds the status timeout. While flagged, status runs in fast mode
+// (`--untracked-files=no`) so its badge keeps refreshing, and the full scan is
+// retried automatically once the backoff below has elapsed: 1, 2, 4, 8, 16
+// minutes, then every 30 minutes. A successful full scan clears the flag. This
+// replaces the old sticky flag that needed a manual right-click to leave.
 
 const stmtMarkRepoSlow = db.prepare(
-  'UPDATE repos SET slow_mode = 1, last_timed_out_at = @at WHERE id = @id'
+  'UPDATE repos SET slow_mode = 1, last_timed_out_at = @at, timeout_count = timeout_count + 1 WHERE id = @id'
 );
 const stmtClearRepoSlow = db.prepare(
-  'UPDATE repos SET slow_mode = 0 WHERE id = ?'
+  'UPDATE repos SET slow_mode = 0, timeout_count = 0, last_timed_out_at = NULL WHERE id = ?'
 );
 const stmtSlowRepoIds = db.prepare(
   'SELECT id FROM repos WHERE slow_mode = 1'
 );
-const stmtIsRepoSlowByPath = db.prepare(
-  'SELECT slow_mode FROM repos WHERE path = ?'
+const stmtSlowInfoByPath = db.prepare(
+  'SELECT id, slow_mode, timeout_count, last_timed_out_at FROM repos WHERE path = ?'
 );
+const stmtSlowInfoById = db.prepare(
+  'SELECT id, slow_mode, timeout_count, last_timed_out_at FROM repos WHERE id = ?'
+);
+
+export interface SlowInfo {
+  id: string;
+  slowMode: boolean;
+  timeoutCount: number;
+  lastTimedOutAt: string | null;
+}
+
+const PROBE_BASE_MS = 60_000;
+const PROBE_MAX_MS = 30 * 60_000;
+
+/** Delay before the next full-scan retry after `timeoutCount` consecutive timeouts. */
+export function slowProbeDelayMs(timeoutCount: number): number {
+  const n = Math.max(1, timeoutCount);
+  return Math.min(PROBE_MAX_MS, PROBE_BASE_MS * 2 ** (n - 1));
+}
+
+/** True when a slow-mode repo is due for another full-scan attempt. */
+export function isSlowProbeDue(info: SlowInfo, now = Date.now()): boolean {
+  if (!info.slowMode) return false;
+  if (!info.lastTimedOutAt) return true;
+  const last = new Date(info.lastTimedOutAt).getTime();
+  if (Number.isNaN(last)) return true;
+  return now - last >= slowProbeDelayMs(info.timeoutCount);
+}
+
+function rowToSlowInfo(row: any): SlowInfo | undefined {
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    slowMode: !!row.slow_mode,
+    timeoutCount: row.timeout_count ?? 0,
+    lastTimedOutAt: row.last_timed_out_at ?? null,
+  };
+}
 
 export function markRepoSlow(repoId: string, at: string): void {
   stmtMarkRepoSlow.run({ id: repoId, at });
@@ -270,13 +319,18 @@ export function getSlowRepoIds(): string[] {
   return (stmtSlowRepoIds.all() as { id: string }[]).map(r => r.id);
 }
 
-// Look up the slow_mode flag by repo path (the form the git routes carry).
-// Used by the git service to drop the untracked-file scan for huge/slow repos
-// (e.g. ClientGame on the DrvFs /mnt/d mount), which makes `git status` fast
-// without changing the result for those repos. Returns false for unknown paths.
+export function getSlowInfoById(repoId: string): SlowInfo | undefined {
+  return rowToSlowInfo(stmtSlowInfoById.get(repoId));
+}
+
+// Look up by repo path (the form the git routes carry). Returns undefined for
+// paths that are not bookmarked.
+export function getSlowInfoByPath(repoPath: string): SlowInfo | undefined {
+  return rowToSlowInfo(stmtSlowInfoByPath.get(repoPath));
+}
+
 export function isRepoSlowByPath(repoPath: string): boolean {
-  const row = stmtIsRepoSlowByPath.get(repoPath) as { slow_mode: number } | undefined;
-  return !!(row && row.slow_mode);
+  return !!getSlowInfoByPath(repoPath)?.slowMode;
 }
 
 // --- Repo status cache ---
