@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { RepoBookmark } from '@sikagit/shared';
 import { api } from '../lib/api';
+import { refreshOpenRepo } from '../lib/repoRefresh';
 
 interface RepoState {
   repos: RepoBookmark[];
@@ -79,7 +80,14 @@ export const useRepoStore = create<RepoState>()(
       },
 
       setActiveRepo: (id: string) => {
-        set({ activeRepoId: id });
+        if (get().activeRepoId === id) {
+          // Re-clicking the open repo changes nothing in the store, so the repo
+          // view's effect won't fire — reload explicitly so a click always
+          // shows the current commits/branches/working tree.
+          void refreshOpenRepo('reopen');
+        } else {
+          set({ activeRepoId: id });
+        }
         api.openRepo(id).catch(() => {});
       },
     }),

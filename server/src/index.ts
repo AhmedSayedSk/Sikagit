@@ -30,6 +30,14 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '5mb' }));
 
+// API replies describe live git state - never let the browser (or a proxy)
+// reuse an earlier reply for the same URL. Express still adds an ETag, so a
+// revalidation can 304, but the body is always recomputed server-side.
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
 // Routes
 app.use('/api/v1/repos', reposRouter);
 app.use('/api/v1/projects', projectsRouter);

@@ -271,6 +271,8 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   // Auto-poll status every 7 seconds to detect external file changes.
   // Pauses while the tab is hidden — `git status` on a large working tree
   // is expensive on WSL/Docker and there's no point running it unseen.
+  // The catch-up when the tab becomes visible again (status AND commit log)
+  // is done once, centrally, in lib/repoRefresh — not duplicated here.
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     const start = () => {
@@ -282,7 +284,6 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        fetchStatus(repoPath); // catch up on changes that happened while hidden
         start();
       } else {
         stop();

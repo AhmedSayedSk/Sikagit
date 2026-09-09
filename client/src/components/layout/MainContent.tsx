@@ -19,6 +19,7 @@ import { useToastStore } from '../../store/toastStore';
 import { useConfirmStore } from '../../store/confirmStore';
 import { useRepoStatusStore } from '../../store/repoStatusStore';
 import { shouldAutoFetch, markAutoFetched } from '../../lib/autoFetch';
+import { refreshRepo, whenRepoIdle } from '../../lib/repoRefresh';
 
 export function MainContent() {
   const repos = useRepoStore(s => s.repos);
@@ -38,16 +39,18 @@ export function MainContent() {
   const [mergePreselect, setMergePreselect] = useState<string | undefined>();
   const addToast = useToastStore(s => s.addToast);
 
+  // Every way a repo becomes the open one (sidebar click, deep link, browser
+  // refresh, back/forward) lands here via activeRepoId. refreshRepo dedupes
+  // against any in-flight load for the same repo, so one open = one load.
+  // Re-clicks of the open repo and tab focus/visibility are handled in
+  // lib/repoRefresh (see repoStore.setActiveRepo and AppShell).
   useEffect(() => {
     // Close the changes panel when switching repos
     selectCommit(null);
     selectFile(null);
 
-    if (repo) {
-      fetchLog(repo.path);
-      fetchAll(repo.path);
-    }
-  }, [repo?.id, fetchLog, fetchAll, selectCommit, selectFile]);
+    if (repo) void refreshRepo(repo.path, 'open');
+  }, [repo?.id, selectCommit, selectFile]);
 
   // Auto background-fetch on repo open (opt-out via Settings → General).
   // Best-effort: keeps the behind/pull indicator honest without the user
@@ -63,7 +66,10 @@ export function MainContent() {
     const { id, path } = repo;
     let cancelled = false;
     setRemoteAction('fetch'); // reuse the toolbar Fetch spinner
-    api.gitFetch(path)
+    // Show the local state first: wait for the open-load above before going to
+    // the network, so the remote round-trip never delays the commit list.
+    whenRepoIdle(path)
+      .then(() => api.gitFetch(path))
       .then(() => {
         markAutoFetched(id); // only count successful fetches toward cooldown
         if (cancelled) return; // repo switched mid-fetch — don't stomp new repo's state

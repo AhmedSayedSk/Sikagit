@@ -11,6 +11,9 @@ import { useRepoStore } from './repoStore';
 function syncSidebarFromStatus(repoPath: string, status: GitStatus) {
   const repo = useRepoStore.getState().repos.find(r => r.path === repoPath);
   if (!repo) return;
+  // GitStatus carries no commit date — keep the chip's last-known value instead
+  // of wiping it on every status load (lib/repoRefresh advances it from the log).
+  const prev = useRepoStatusStore.getState().summaries[repo.id];
   useRepoStatusStore.getState().setSummary(repo.id, {
     ahead: status.ahead,
     behind: status.behind,
@@ -19,8 +22,14 @@ function syncSidebarFromStatus(repoPath: string, status: GitStatus) {
     hasUnstaged: status.unstaged.length > 0 || status.untracked.length > 0,
     hasRemote: !!(status.tracking || status.remoteUrl),
     computedAt: new Date().toISOString(),
+    lastCommitAt: prev?.lastCommitAt ?? null,
   });
 }
+
+// Path of the most recently *requested* status. A reply is only applied while
+// its repo is still the latest one asked for, so a slow `git status` from the
+// repo you just left can't overwrite the one now open.
+let latestStatusRepo: string | null = null;
 
 type SelectedFileSource = 'staged' | 'unstaged';
 
@@ -130,8 +139,10 @@ export const useStatusStore = create<StatusState>()((set) => ({
   pendingUnstaged: new Set<string>(),
 
   fetchStatus: async (repo: string) => {
+    latestStatusRepo = repo;
     try {
       const fetched = await api.getStatus(repo);
+      if (latestStatusRepo !== repo) return; // repo switched meanwhile — stale reply
       set((state) => {
         const r = reconcileWithPending(fetched, state.pendingStaged, state.pendingUnstaged);
         return {
@@ -142,6 +153,7 @@ export const useStatusStore = create<StatusState>()((set) => ({
       });
       syncSidebarFromStatus(repo, fetched);
     } catch (err: any) {
+      if (latestStatusRepo !== repo) return;
       set({ error: err.message });
     }
   },
@@ -165,6 +177,9 @@ export const useStatusStore = create<StatusState>()((set) => ({
   },
 
   fetchAll: async (repo: string) => {
+    latestStatusRepo = repo;
+    // `loading` only drives the status bar's "Refreshing…" label; the panels keep
+    // showing the current data until the fresh reply replaces it in place.
     set({ loading: true, error: null });
     try {
       const [fetched, branches, tags] = await Promise.all([
@@ -172,6 +187,7 @@ export const useStatusStore = create<StatusState>()((set) => ({
         api.getBranches(repo),
         api.getTags(repo),
       ]);
+      if (latestStatusRepo !== repo) return; // repo switched meanwhile — stale reply
       set((state) => {
         const r = reconcileWithPending(fetched, state.pendingStaged, state.pendingUnstaged);
         return {
@@ -185,6 +201,7 @@ export const useStatusStore = create<StatusState>()((set) => ({
       });
       syncSidebarFromStatus(repo, fetched);
     } catch (err: any) {
+      if (latestStatusRepo !== repo) return;
       set({ error: err.message, loading: false });
     }
   },

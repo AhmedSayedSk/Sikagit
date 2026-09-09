@@ -430,7 +430,14 @@ router.post('/test-remote', asyncHandler(async (req: Request, res: Response) => 
 
 router.post('/fetch', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  await withRepoLock(repoPath, () => gitService.gitFetch(repoPath));
+  // Deliberately NOT under withRepoLock. Fetch only updates remote-tracking refs
+  // (git takes its own per-ref locks; it never touches the index/working tree)
+  // but can sit idle for up to GIT_NETWORK_TIMEOUT_MS on a stalled remote.
+  // Holding the per-repo mutex that long queued every local read for the open
+  // repo (status/log/graph/branches) behind it, which is how the commit list
+  // could look frozen or stale while a background fetch was hanging. Pull and
+  // push still take the lock — they modify the working tree / index.
+  await gitService.gitFetch(repoPath);
   res.json({ success: true });
 }));
 
