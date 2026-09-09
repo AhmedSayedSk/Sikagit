@@ -3,17 +3,15 @@ import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { MainContent } from './MainContent';
 import { ResizeHandle } from '../ui/ResizeHandle';
-import { useRepoStore } from '../../store/repoStore';
 import { useUIStore } from '../../store/uiStore';
+import { useUrlSelection } from '../../lib/urlSelection';
 import { cn } from '../../lib/utils';
 
 export function AppShell() {
   const { sidebarOpen, sidebarWidth, setSidebarWidth, fontSize, demoMode } = useUIStore();
-  const fetchRepos = useRepoStore(s => s.fetchRepos);
 
-  useEffect(() => {
-    fetchRepos();
-  }, [fetchRepos]);
+  // Fetches repos + projects and keeps the open project/repo in sync with the URL.
+  useUrlSelection();
 
   // Apply font size to <html> root so all rem-based sizes scale
   useEffect(() => {

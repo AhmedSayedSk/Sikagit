@@ -599,7 +599,7 @@ function RepoItem({ repo, isActive, onSelect }: {
 
 export function Sidebar() {
   const { repos, activeRepoId, setActiveRepo } = useRepoStore();
-  const { projects, fetchProjects, deleteProject, updateProject } = useProjectStore();
+  const { projects, activeProjectId, setActiveProject, deleteProject, updateProject } = useProjectStore();
   const loadCached = useRepoStatusStore(s => s.loadCached);
   const refreshSubset = useRepoStatusStore(s => s.refreshSubset);
   const didInitialFullRefresh = useRef(false);
@@ -678,19 +678,11 @@ export function Sidebar() {
     if (active) enqueueRepoRefresh({ id: active.id, path: active.path, slowMode: active.slowMode }, { force: true });
   }, [activeRepoId, repos]);
 
-  // Accordion: only one project expanded at a time; auto-expand project containing active repo
-  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
-
-  // Auto-expand project containing the active repo (on load, refresh, or repo change)
-  useEffect(() => {
-    if (!activeRepoId) return;
-    const p = projects.find(p => p.repoIds.includes(activeRepoId));
-    if (p) setExpandedProjectId(p.id);
-  }, [activeRepoId, projects]);
-
-  useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+  // Accordion: only one project expanded at a time. The expanded project lives in
+  // the project store (activeProjectId) so the URL can drive it — see useUrlSelection,
+  // which also fetches projects (with repos) and, on load, expands the project that
+  // contains the active repo. Nothing here changes the selection implicitly, so
+  // back/forward always lands on exactly the state the URL describes.
 
   // Repos that belong to any project
   const assignedRepoIds = new Set(projects.flatMap(p => p.repoIds));
@@ -764,10 +756,10 @@ export function Sidebar() {
                 project={project}
                 repos={repos}
                 activeRepoId={activeRepoId}
-                expanded={expandedProjectId === project.id}
+                expanded={activeProjectId === project.id}
                 onToggle={() => {
-                  const willExpand = expandedProjectId !== project.id;
-                  setExpandedProjectId(willExpand ? project.id : null);
+                  const willExpand = activeProjectId !== project.id;
+                  setActiveProject(willExpand ? project.id : null);
                   // Opening a project refreshes its repos' times (force a fresh sweep).
                   if (willExpand) {
                     refreshSubset(
@@ -778,7 +770,7 @@ export function Sidebar() {
                     );
                   }
                 }}
-                onSelectRepo={(id) => { setActiveRepo(id); setExpandedProjectId(project.id); }}
+                onSelectRepo={(id) => { setActiveRepo(id); setActiveProject(project.id); }}
                 onEditProject={() => setProjectDialog({ open: true, project })}
                 onDeleteProject={async () => {
                   const confirmed = await confirm({

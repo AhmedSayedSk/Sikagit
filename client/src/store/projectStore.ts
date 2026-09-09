@@ -4,7 +4,10 @@ import { api } from '../lib/api';
 
 interface ProjectState {
   projects: Project[];
+  /** The expanded (open) project in the sidebar. Mirrored to the URL by useUrlSelection. */
+  activeProjectId: string | null;
   fetchProjects: () => Promise<void>;
+  setActiveProject: (id: string | null) => void;
   createProject: (name: string, repoIds?: string[], avatar?: string) => Promise<void>;
   updateProject: (id: string, data: { name?: string; avatar?: string; repoIds?: string[] }) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
@@ -15,11 +18,14 @@ interface ProjectState {
 
 export const useProjectStore = create<ProjectState>()((set, get) => ({
   projects: [],
+  activeProjectId: null,
 
   fetchProjects: async () => {
     const projects = await api.getProjects();
     set({ projects });
   },
+
+  setActiveProject: (id) => set({ activeProjectId: id }),
 
   createProject: async (name, repoIds = [], avatar) => {
     const project = await api.createProject(name, repoIds, avatar);
@@ -33,7 +39,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   deleteProject: async (id) => {
     await api.deleteProject(id);
-    set(state => ({ projects: state.projects.filter(p => p.id !== id) }));
+    set(state => ({
+      projects: state.projects.filter(p => p.id !== id),
+      activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
+    }));
   },
 
   reorderProjects: async (ids) => {

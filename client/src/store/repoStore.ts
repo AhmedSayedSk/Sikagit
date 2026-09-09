@@ -85,6 +85,8 @@ export const useRepoStore = create<RepoState>()(
     }),
     {
       name: 'sikagit-repos',
+      // Persisted activeRepoId is only a fallback for a URL with no selection;
+      // the URL always wins on load (see lib/urlSelection.ts).
       partialize: (state) => ({ activeRepoId: state.activeRepoId }),
     }
   )
