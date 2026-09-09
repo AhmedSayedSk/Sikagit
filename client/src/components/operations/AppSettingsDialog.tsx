@@ -16,10 +16,19 @@ const tabs: { id: Tab; label: string; icon: typeof Type }[] = [
   { id: 'ai', label: 'AI', icon: Sparkles },
 ];
 
-// Only the current stable Flash model is offered; the 2.x models were retired
-// from this list (the store migrates any saved 2.x choice to this default).
+// Flash-family text models only (the Pro models were retired from this list;
+// the store migrates any saved unsupported choice to the default). Keep in
+// sync with SUPPORTED_AI_MODELS in store/uiStore.ts.
 const AI_MODELS = [
-  { id: DEFAULT_AI_MODEL, label: 'Gemini 3.8 Flash' },
+  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+  { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
+  { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
+  { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
+  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
 ];
 
 function SizeControl({ label, value, onChange, min, max, description }: {

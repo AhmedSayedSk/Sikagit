@@ -68,9 +68,20 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-// Gemini model used for AI suggestions. Saved 2.x choices are migrated here (v3).
+// Gemini model used for AI suggestions: the Flash family only (Pro retired).
+// Keep in sync with AI_MODELS in components/operations/AppSettingsDialog.tsx.
 export const DEFAULT_AI_MODEL = 'gemini-3.8-flash';
-const SUPPORTED_AI_MODELS = new Set([DEFAULT_AI_MODEL]);
+const SUPPORTED_AI_MODELS = new Set([
+  DEFAULT_AI_MODEL,
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3-flash-preview',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+]);
 
 export const useUIStore = create<UIState>()(
   persist(
@@ -150,8 +161,8 @@ export const useUIStore = create<UIState>()(
       version: 3,
       // v1/v2: the diff font default dropped 12px -> 11px -> 10px; carry users
       // still on a previous default over, keep explicit choices.
-      // v3: the Gemini 2.x models were retired; anything not in the supported
-      // list becomes the current default.
+      // v3: the Gemini Pro models were retired; anything not in the supported
+      // Flash list becomes the current default.
       migrate: (persisted, version) => {
         const state = persisted as Partial<UIState>;
         if (version < 1 && state.diffFontSize === 12) state.diffFontSize = 11;
