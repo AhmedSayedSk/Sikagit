@@ -37,6 +37,9 @@ services:
       - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no
       - AZURE_DEVOPS_PAT=${AZURE_DEVOPS_PAT:-}
       - STATUS_TIMEOUT_MS=${STATUS_TIMEOUT_MS:-8000}
+      # Idle budget for fetch/pull/push. Much larger than the status timeout:
+      # it bounds how long a remote may stay silent, not how long a transfer runs.
+      - GIT_NETWORK_TIMEOUT_MS=${GIT_NETWORK_TIMEOUT_MS:-120000}
     restart: unless-stopped
 
   client:

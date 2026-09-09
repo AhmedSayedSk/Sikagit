@@ -17,6 +17,19 @@ import { isRepoSlowByPath } from './db';
 
 const STATUS_TIMEOUT_MS = parseInt(process.env.STATUS_TIMEOUT_MS || '20000', 10);
 
+/**
+ * Idle budget for operations that talk to a remote (fetch / pull / push).
+ *
+ * simple-git's `block` is an *idle* timer — it resets on every chunk the child
+ * writes — so this bounds how long a remote may stay completely silent, not how
+ * long a transfer may take. STATUS_TIMEOUT_MS is sized for local status sweeps
+ * (8s under docker-compose); applying it to a push kills the transfer, because
+ * git only writes transfer progress when stderr is a TTY. Network commands here
+ * are given `--progress` so they keep feeding this timer over a pipe, which
+ * leaves it firing only on a genuine stall.
+ */
+const NETWORK_TIMEOUT_MS = parseInt(process.env.GIT_NETWORK_TIMEOUT_MS || '120000', 10);
+
 export class GitTimeoutError extends Error {
   public readonly label: string;
   public readonly ms: number;
@@ -103,7 +116,7 @@ function readHostGitConfig(key: string): string {
   return '';
 }
 
-function getGit(repoPath: string): SimpleGit {
+function getGit(repoPath: string, opts: { network?: boolean } = {}): SimpleGit {
   const normalized = normalizePath(repoPath);
   // core.quotepath=false makes git emit non-ASCII paths (Arabic, CJK, accents…)
   // as raw UTF-8 instead of octal escapes like "\330\261\331\210...". Simple-git
@@ -113,10 +126,48 @@ function getGit(repoPath: string): SimpleGit {
   // timeout.block: kill the spawned git subprocess if it overruns. Belt-and-braces
   // alongside withTimeout() — without this, a hung git child keeps running until
   // OS reaper time even after our promise rejects, wasting a concurrency slot.
-  return simpleGit(normalized, {
+  // Remote-facing commands need the far larger network budget; see NETWORK_TIMEOUT_MS.
+  const git = simpleGit(normalized, {
     config: ['core.quotepath=false'],
-    timeout: { block: STATUS_TIMEOUT_MS },
+    timeout: { block: opts.network ? NETWORK_TIMEOUT_MS : STATUS_TIMEOUT_MS },
   });
+
+  if (opts.network) {
+    // There is no terminal attached to the server, so a credential prompt would
+    // sit unanswered until the idle timeout expires. Refusing to prompt turns
+    // that silent stall into an immediate, explainable failure. Spread
+    // process.env first: .env() replaces the child environment wholesale, and
+    // GIT_SSH_COMMAND / HOME / PATH all have to survive.
+    git.env({ ...process.env, GIT_TERMINAL_PROMPT: '0' });
+  }
+
+  return git;
+}
+
+/**
+ * Turn the opaque failures of a remote operation into something a user can act
+ * on. simple-git reports its idle-timeout kill as bare `block timeout reached`,
+ * which says nothing about which remote stalled or what to do about it.
+ */
+function describeNetworkError(err: any, action: string): Error {
+  const msg: string = err?.message || '';
+
+  if (msg.includes('block timeout reached')) {
+    const seconds = Math.round(NETWORK_TIMEOUT_MS / 1000);
+    return new Error(
+      `${action} timed out — the remote sent nothing for ${seconds}s. ` +
+      `Check your network or VPN, and that the remote is reachable.`
+    );
+  }
+
+  if (/could not read (Username|Password)|terminal prompts disabled/i.test(msg)) {
+    return new Error(
+      `${action} failed — the remote asked for credentials. ` +
+      `Set up an SSH key or a credential helper for this repository.`
+    );
+  }
+
+  return err;
 }
 
 /**
@@ -1099,8 +1150,14 @@ export async function testRemoteConnection(repoPath: string, url?: string): Prom
 }
 
 export async function gitFetch(repoPath: string): Promise<void> {
-  const git = getGit(repoPath);
-  await git.fetch('origin');
+  const git = getGit(repoPath, { network: true });
+  try {
+    // --progress: git suppresses transfer progress on a pipe, and that silence
+    // is what trips simple-git's idle timeout on anything but a tiny fetch.
+    await git.fetch(['origin', '--progress']);
+  } catch (err) {
+    throw describeNetworkError(err, 'Fetch');
+  }
 }
 
 async function getAuthorIdentity(repoPath: string): Promise<{ name: string; email: string }> {
@@ -1124,7 +1181,7 @@ export async function gitPull(
   strategy?: 'merge' | 'rebase',
   allowUnrelatedHistories?: boolean,
 ): Promise<string> {
-  const git = getGit(repoPath);
+  const git = getGit(repoPath, { network: true });
   const normalized = normalizePath(repoPath);
   const status = await git.status();
 
@@ -1132,7 +1189,8 @@ export async function gitPull(
     try {
       // For merge strategy, we need author identity for the merge commit
       const needsIdentity = strategy === 'merge';
-      const pullArgs: string[] = [];
+      // See gitFetch for why --progress matters over a pipe.
+      const pullArgs: string[] = ['--progress'];
 
       if (strategy === 'rebase') pullArgs.push('--rebase');
       else if (strategy === 'merge') pullArgs.push('--no-rebase');
@@ -1150,7 +1208,15 @@ export async function gitPull(
         const escapedName = author.name.replace(/'/g, "'\\''");
         const escapedEmail = author.email.replace(/'/g, "'\\''");
         const cmd = `git -c user.name='${escapedName}' -c user.email='${escapedEmail}' pull ${pullArgs.join(' ')}`;
-        output = execSync(cmd, { cwd: normalized, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 });
+        // GIT_TERMINAL_PROMPT=0 for the same reason getGit sets it on network
+        // instances: this execSync has no timeout at all, so an unanswerable
+        // credential prompt would hang the request forever.
+        output = execSync(cmd, {
+          cwd: normalized,
+          encoding: 'utf-8',
+          maxBuffer: 10 * 1024 * 1024,
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        });
       } else {
         output = await git.raw(['pull', ...pullArgs]);
       }
@@ -1168,7 +1234,7 @@ export async function gitPull(
           msg.includes('fatal: no common commits')) {
         throw new Error('UNRELATED_HISTORIES');
       }
-      throw err;
+      throw describeNetworkError(err, 'Pull');
     }
   };
 
@@ -1218,38 +1284,42 @@ function isNonFastForwardError(msg: string): boolean {
 }
 
 export async function gitPush(repoPath: string, setUpstream?: boolean, upToCommit?: string, force?: boolean): Promise<string> {
-  const git = getGit(repoPath);
+  const git = getGit(repoPath, { network: true });
   if (!(await hasCommits(repoPath))) {
     throw new Error('Nothing to push — repository has no commits yet. Make your first commit before pushing.');
   }
   const branch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
 
   try {
+    // --progress keeps git writing to stderr during the transfer. Without it a
+    // push over a pipe is silent from spawn to completion, and simple-git's idle
+    // timeout kills anything that takes longer than the budget — the
+    // "block timeout reached" failure this guards against.
     if (upToCommit) {
       // Push only up to a specific commit: git push origin <hash>:refs/heads/<branch>
-      const args = ['origin', `${upToCommit}:refs/heads/${branch}`];
+      const args = ['--progress', 'origin', `${upToCommit}:refs/heads/${branch}`];
       if (force) args.unshift('--force-with-lease');
       await git.push(args);
       return `Pushed up to ${upToCommit.slice(0, 7)}`;
     }
 
     if (setUpstream) {
-      const args = ['--set-upstream', 'origin', branch];
+      const args = ['--progress', '--set-upstream', 'origin', branch];
       if (force) args.unshift('--force-with-lease');
       await git.push(args);
       return `Pushed and set upstream for ${branch}`;
     }
     if (force) {
-      await git.push(['--force-with-lease', 'origin', branch]);
+      await git.push(['--progress', '--force-with-lease', 'origin', branch]);
     } else {
-      await git.push('origin');
+      await git.push(['--progress', 'origin']);
     }
     return force ? `Force pushed ${branch} successfully` : 'Pushed successfully';
   } catch (err: any) {
     if (!force && isNonFastForwardError(err?.message || '')) {
       throw new Error('REJECTED_NON_FAST_FORWARD');
     }
-    throw err;
+    throw describeNetworkError(err, 'Push');
   }
 }
 
