@@ -133,7 +133,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
 
   const handleReset = () => {
     setDraftFontSize(14);
-    setDraftDiffFontSize(11);
+    setDraftDiffFontSize(10);
     setDraftDiffLineHeight(3);
     setDraftTheme('dark');
     setDraftGroupFiles(true);

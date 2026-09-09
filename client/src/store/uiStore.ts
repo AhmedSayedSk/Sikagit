@@ -75,7 +75,7 @@ export const useUIStore = create<UIState>()(
       activePanel: 'log',
       theme: 'dark',
       fontSize: 14,
-      diffFontSize: 11,
+      diffFontSize: 10,
       diffLineHeight: 3,
       // Defaults to 'eol': line-ending churn is never worth reading, and left
       // unfiltered it reports every line of a file as changed.
@@ -143,12 +143,13 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'sikagit-ui',
-      version: 1,
-      // v1: the diff font default dropped from 12px to 11px; carry users who
-      // never changed it over to the new default, keep explicit choices.
+      version: 2,
+      // The diff font default dropped 12px -> 11px (v1) -> 10px (v2); carry
+      // users still on a previous default over, keep explicit choices.
       migrate: (persisted, version) => {
         const state = persisted as Partial<UIState>;
         if (version < 1 && state.diffFontSize === 12) state.diffFontSize = 11;
+        if (version < 2 && state.diffFontSize === 11) state.diffFontSize = 10;
         return state as UIState;
       },
     }
